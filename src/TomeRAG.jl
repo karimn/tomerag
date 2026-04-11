@@ -1,5 +1,7 @@
 module TomeRAG
 
-# Includes will be added as each task lands.
+include("content_types.jl")
+
+export DEFAULT_CONTENT_TYPES, PBTA_CONTENT_TYPES, YZE_CONTENT_TYPES
 
 end # module

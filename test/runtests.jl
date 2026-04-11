@@ -2,5 +2,5 @@ using Test
 using TomeRAG
 
 @testset "TomeRAG.jl" begin
-    @test isdefined(Main, :TomeRAG) || isdefined(@__MODULE__, :TomeRAG)
+    include("test_content_types.jl")
 end
