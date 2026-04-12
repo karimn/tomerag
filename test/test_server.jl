@@ -117,6 +117,7 @@ end
                            ["Content-Type" => "application/json"], move_payload)
             @test r2.status == 200
             moves = JSON3.read(r2.body, Vector{Dict{String,Any}})
+            @test length(moves) >= 1
             @test all(m["content_type"] == "move" for m in moves)
         end
 
