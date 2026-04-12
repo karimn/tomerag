@@ -5,4 +5,5 @@ using TomeRAG
     include("test_content_types.jl")
     include("test_types.jl")
     include("test_tokenize.jl")
+    include("test_backends.jl")
 end
