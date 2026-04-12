@@ -43,6 +43,26 @@ struct QueryResult
     rank::Int
 end
 
+# Copy-with-keyword-override constructor for Chunk.
+function Chunk(c::Chunk;
+               id=c.id, source_id=c.source_id, doc_id=c.doc_id, doc_path=c.doc_path,
+               text=c.text, embedding=c.embedding, embedding_model=c.embedding_model,
+               token_count=c.token_count, content_hash=c.content_hash,
+               document_type=c.document_type, system=c.system, edition=c.edition,
+               page=c.page, heading_path=c.heading_path, chunk_order=c.chunk_order,
+               parent_id=c.parent_id, content_type=c.content_type, tags=c.tags,
+               move_trigger=c.move_trigger, scene_type=c.scene_type,
+               encounter_key=c.encounter_key, npc_name=c.npc_name, license=c.license)
+    return Chunk(id=id, source_id=source_id, doc_id=doc_id, doc_path=doc_path,
+                 text=text, embedding=embedding, embedding_model=embedding_model,
+                 token_count=token_count, content_hash=content_hash,
+                 document_type=document_type, system=system, edition=edition,
+                 page=page, heading_path=heading_path, chunk_order=chunk_order,
+                 parent_id=parent_id, content_type=content_type, tags=tags,
+                 move_trigger=move_trigger, scene_type=scene_type,
+                 encounter_key=encounter_key, npc_name=npc_name, license=license)
+end
+
 Base.@kwdef struct Source
     id::String
     name::String

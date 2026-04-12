@@ -137,3 +137,82 @@ function source_stats(src::Source)
         DBInterface.close!(db)
     end
 end
+
+"""
+    similarity_search(src, query_embedding; top_k, filters) -> Vector{QueryResult}
+
+Cosine HNSW search. `filters` maps column name to value; supported keys:
+`"content_type"`, `"document_type"`, `"system"`, `"doc_id"`.
+"""
+function similarity_search(src::Source, q::AbstractVector{<:AbstractFloat};
+                           top_k::Int=10,
+                           filters::Dict{String,Any}=Dict{String,Any}())
+    db = DBInterface.connect(DuckDB.DB, src.db_path)
+    try
+        DuckDB.execute(db, "LOAD vss;")
+
+        where_parts = String[]
+        filter_vals = Any[]
+        for (col, val) in filters
+            col in ("content_type", "document_type", "system", "doc_id") ||
+                error("unsupported filter column: $col")
+            push!(where_parts, "$col = ?")
+            push!(filter_vals, String(val))
+        end
+        where_clause = isempty(where_parts) ? "" : ("WHERE " * join(where_parts, " AND "))
+
+        # LIMIT is inlined (not a bound param) so DuckDB can use the HNSW index.
+        # Cast embedding ARRAY→LIST so DuckDB.jl can deserialise it.
+        sql = """
+            SELECT id, source_id, doc_id, doc_path, text, embedding::FLOAT[] AS embedding,
+                   embedding_model, token_count, content_hash, document_type, system,
+                   edition, page, heading_path, chunk_order, parent_id, content_type, tags,
+                   move_trigger, scene_type, encounter_key, npc_name, license,
+                   array_cosine_distance(embedding, ?::FLOAT[$(src.embedding_dim)]) AS dist
+            FROM chunks
+            $where_clause
+            ORDER BY dist ASC
+            LIMIT $top_k
+        """
+        params = Any[Vector{Float32}(q)]
+        append!(params, filter_vals)
+        results = QueryResult[]
+        rank = 0
+        for row in DuckDB.execute(db, sql, params)
+            rank += 1
+            score = Float32(1.0 - row.dist)
+            push!(results, QueryResult(_row_to_chunk(row), score, rank))
+        end
+        return results
+    finally
+        DBInterface.close!(db)
+    end
+end
+
+function _row_to_chunk(row)
+    return Chunk(
+        id              = row.id,
+        source_id       = row.source_id,
+        doc_id          = row.doc_id,
+        doc_path        = row.doc_path,
+        text            = row.text,
+        embedding       = Float32[x for x in row.embedding if x !== missing],
+        embedding_model = row.embedding_model,
+        token_count     = Int(row.token_count),
+        content_hash    = row.content_hash,
+        document_type   = Symbol(row.document_type),
+        system          = row.system,
+        edition         = row.edition,
+        page            = row.page,
+        heading_path    = JSON3.read(row.heading_path, Vector{String}),
+        chunk_order     = Int(row.chunk_order),
+        parent_id       = row.parent_id === missing ? nothing : row.parent_id,
+        content_type    = Symbol(row.content_type),
+        tags            = JSON3.read(row.tags, Vector{String}),
+        move_trigger    = row.move_trigger === missing ? nothing : row.move_trigger,
+        scene_type      = row.scene_type === missing ? nothing : Symbol(row.scene_type),
+        encounter_key   = row.encounter_key === missing ? nothing : row.encounter_key,
+        npc_name        = row.npc_name === missing ? nothing : row.npc_name,
+        license         = Symbol(row.license),
+    )
+end
