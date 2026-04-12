@@ -5,8 +5,8 @@ using JSON3
 """
     initialize_store(src)
 
-Open `src.db_path`, install+load VSS extension, enable HNSW persistence,
-create `source_meta` and `chunks` tables if absent, create HNSW index.
+Open `src.db_path`, install+load VSS and FTS extensions, enable HNSW persistence,
+create `source_meta` and `chunks` tables if absent, create HNSW and FTS indices.
 """
 function initialize_store(src::Source)
     db = DBInterface.connect(DuckDB.DB, src.db_path)
