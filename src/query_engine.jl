@@ -218,3 +218,32 @@ function get_context(registry::SourceRegistry, chunk_id::AbstractString;
         DBInterface.close!(db)
     end
 end
+
+"""
+    get_chunk(registry, chunk_id) -> Union{Chunk, Nothing}
+
+Search all sources for a chunk with the given ID. Returns the `Chunk` if found,
+`nothing` if no source contains a chunk with that ID.
+"""
+function get_chunk(registry::SourceRegistry, chunk_id::AbstractString)
+    for src in values(registry.sources)
+        db = DBInterface.connect(DuckDB.DB, src.db_path)
+        try
+            for row in DuckDB.execute(db,
+                    """SELECT id, source_id, doc_id, doc_path, text,
+                              embedding::FLOAT[] AS embedding,
+                              embedding_model, token_count, content_hash,
+                              document_type, system, edition, page,
+                              heading_path, chunk_order, parent_id,
+                              content_type, tags, move_trigger,
+                              scene_type, encounter_key, npc_name, license
+                       FROM chunks WHERE id = ? LIMIT 1""",
+                    (String(chunk_id),))
+                return _row_to_chunk(row)
+            end
+        finally
+            DBInterface.close!(db)
+        end
+    end
+    return nothing
+end

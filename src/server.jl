@@ -1,14 +1,13 @@
 using Oxygen
 using HTTP
 using JSON3
-using DBInterface
 
 """
     serve(registry; port=8080, async=false, embed_backend=nothing)
 
 Start the TomeRAG REST API server.
 - `async=true` returns a closeable handle (use `close(server)` to stop).
-- `embed_backend` is required for endpoints that embed text (/query, /lookup, /multi_query).
+- `embed_backend` is required for endpoints that embed text (/query, /multi_query).
   Pass a `MockEmbeddingBackend` for tests or an `OllamaBackend` for production.
 """
 function serve(registry::SourceRegistry;
@@ -75,7 +74,6 @@ function _setup_routes!(registry::SourceRegistry,
     end
 
     @get "/lookup" function(req::HTTP.Request)
-        isnothing(embed_backend) && return _error(501, "no embed_backend configured")
         params = HTTP.queryparams(HTTP.URI(req.target))
         haskey(params, "name")   || return _error(400, "missing query param: name")
         haskey(params, "source") || return _error(400, "missing query param: source")
@@ -107,26 +105,9 @@ function _setup_routes!(registry::SourceRegistry,
     end
 
     @get "/chunk/{id}" function(req::HTTP.Request, id::String)
-        for src in values(registry.sources)
-            db = DBInterface.connect(DuckDB.DB, src.db_path)
-            try
-                for row in DuckDB.execute(db,
-                        """SELECT id, source_id, doc_id, doc_path, text,
-                                  embedding::FLOAT[] AS embedding,
-                                  embedding_model, token_count, content_hash,
-                                  document_type, system, edition, page,
-                                  heading_path, chunk_order, parent_id,
-                                  content_type, tags, move_trigger,
-                                  scene_type, encounter_key, npc_name, license
-                           FROM chunks WHERE id = ? LIMIT 1""",
-                        (id,))
-                    return _chunk_dict(_row_to_chunk(row))
-                end
-            finally
-                DBInterface.close!(db)
-            end
-        end
-        return _error(404, "chunk not found: $id")
+        chunk = get_chunk(registry, id)
+        isnothing(chunk) && return _error(404, "chunk not found: $id")
+        return _chunk_dict(chunk)
     end
 
     @get "/chunk/{id}/context" function(req::HTTP.Request, id::String)

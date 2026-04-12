@@ -20,7 +20,7 @@ export EmbeddingBackend, ClassifyBackend,
 export split_to_token_budget
 export initialize_store, insert_chunks, source_stats, similarity_search, bm25_search
 export ingest!
-export query, filter_chunks, lookup, multi_query, get_context
+export query, filter_chunks, lookup, multi_query, get_context, get_chunk
 export serve
 
 end # module
