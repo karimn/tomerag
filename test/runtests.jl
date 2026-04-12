@@ -10,4 +10,5 @@ using TomeRAG
     include("test_heuristic.jl")
     include("test_chunker.jl")
     include("test_splitter.jl")
+    include("test_storage.jl")
 end
