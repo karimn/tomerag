@@ -139,3 +139,67 @@ function _apply_overlap(pieces::Vector{String}, overlap_tokens::Int)
     end
     return out
 end
+
+"""
+    RawChunk
+
+Intermediate chunk: text, heading path, chunk_order within the document,
+page (empty string for markdown — set by PDF extractor later).
+"""
+Base.@kwdef struct RawChunk
+    heading_path::Vector{String}
+    text::String
+    chunk_order::Int
+    page::String = ""
+end
+
+"""
+    chunk_document(md, cfg) -> Vector{RawChunk}
+
+Markdown → section parse → token-budget split → sequential numbering.
+Sections with fewer than `cfg.min_tokens` tokens are merged into the next section.
+"""
+function chunk_document(md::AbstractString, cfg::ChunkingConfig)
+    sections = parse_markdown_sections(md)
+    out = RawChunk[]
+    pending = nothing   # Section pending merge due to min_tokens
+
+    function emit(sec::Section)
+        pieces = split_to_token_budget(sec.text;
+            max_tokens     = cfg.max_tokens,
+            overlap_tokens = cfg.overlap_tokens,
+            overflow       = cfg.overflow)
+        for p in pieces
+            push!(out, RawChunk(
+                heading_path = sec.heading_path,
+                text         = p,
+                chunk_order  = length(out),
+            ))
+        end
+    end
+
+    for sec in sections
+        tc = length(split(sec.text))
+        if tc < cfg.min_tokens
+            if pending === nothing
+                pending = sec
+            else
+                pending = Section(
+                    heading_path = pending.heading_path,
+                    text         = pending.text * "\n\n" * sec.text)
+            end
+            continue
+        end
+        if pending !== nothing
+            merged = Section(
+                heading_path = pending.heading_path,
+                text         = pending.text * "\n\n" * sec.text)
+            emit(merged)
+            pending = nothing
+        else
+            emit(sec)
+        end
+    end
+    pending !== nothing && emit(pending)
+    return out
+end
