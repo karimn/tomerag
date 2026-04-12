@@ -10,6 +10,7 @@ export Chunk, QueryResult, ChunkingConfig
 export Source, SourceRegistry, register_source!, get_source
 export EmbeddingBackend, ClassifyBackend,
        MockEmbeddingBackend, MockClassifyBackend,
+       OllamaBackend, HeuristicBackend,
        embed, classify
 
 end # module
