@@ -1,6 +1,6 @@
 using Test
 using TomeRAG: initialize_store, insert_chunks, Chunk, Source, ChunkingConfig,
-               DEFAULT_CONTENT_TYPES, source_stats, similarity_search
+               DEFAULT_CONTENT_TYPES, source_stats, similarity_search, bm25_search
 
 function _mk_source(path; dim=4)
     Source(
@@ -77,4 +77,32 @@ end
     @test results[1].chunk.id == "a"
     @test results[1].rank == 1
     @test 0 <= results[1].score <= 1
+end
+
+@testset "bm25_search" begin
+    path = tempname() * ".duckdb"
+    src = _mk_source(path)
+    initialize_store(src)
+
+    # Insert chunks with distinct text
+    c1 = _mk_chunk("bm1", "iron vow momentum move roll")
+    c2 = _mk_chunk("bm2", "delve the dungeon depths explore")
+    c3 = _mk_chunk("bm3", "blight corruption spreads darkness")
+    insert_chunks(src, [c1, c2, c3])
+
+    results = bm25_search(src, "momentum iron vow"; top_k=3)
+    @test length(results) >= 1
+    # First result should be the momentum/iron vow chunk
+    top_chunk, top_score = results[1]
+    @test top_chunk.id == "bm1"
+    @test top_score > 0.0f0
+
+    # Filter by content_type returns only matching chunks
+    c4 = _mk_chunk("bm4", "iron vow move lore")
+    c4 = Chunk(c4; content_type = :lore)
+    insert_chunks(src, [c4])
+    lore_results = bm25_search(src, "iron vow";
+                               top_k=5,
+                               filters=Dict{String,Any}("content_type" => "lore"))
+    @test all(r[1].content_type == :lore for r in lore_results)
 end

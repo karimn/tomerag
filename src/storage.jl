@@ -64,6 +64,9 @@ function initialize_store(src::Source)
             CREATE INDEX IF NOT EXISTS chunks_hnsw_idx
                 ON chunks USING HNSW (embedding) WITH (metric='cosine');
         """)
+        DuckDB.query(db, "INSTALL fts")
+        DuckDB.query(db, "LOAD fts")
+        DuckDB.query(db, "PRAGMA create_fts_index('chunks', 'id', 'text', stemmer='porter', overwrite=1)")
     finally
         DBInterface.close!(db)
     end
@@ -82,13 +85,13 @@ function insert_chunks(src::Source, chunks::AbstractVector{Chunk})
     inserted = 0
     try
         DuckDB.execute(db, "LOAD vss;")
+        DuckDB.query(db, "LOAD fts")
         DuckDB.execute(db, "BEGIN;")
         stmt = """
             INSERT INTO chunks VALUES
             (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         for c in chunks
-            # Pre-check dedup (DuckDB.jl doesn't expose row-affected count).
             exists = false
             for _ in DuckDB.execute(db,
                     "SELECT 1 FROM chunks WHERE doc_id=? AND content_hash=? LIMIT 1",
@@ -109,8 +112,12 @@ function insert_chunks(src::Source, chunks::AbstractVector{Chunk})
             inserted += 1
         end
         DuckDB.execute(db, "COMMIT;")
+        if inserted > 0
+            DuckDB.query(db, "PRAGMA drop_fts_index('chunks')")
+            DuckDB.query(db, "PRAGMA create_fts_index('chunks', 'id', 'text', stemmer='porter', overwrite=1)")
+        end
     catch e
-        DuckDB.execute(db, "ROLLBACK;")
+        try DuckDB.execute(db, "ROLLBACK;") catch end
         rethrow(e)
     finally
         DBInterface.close!(db)
@@ -215,4 +222,52 @@ function _row_to_chunk(row)
         npc_name        = row.npc_name === missing ? nothing : row.npc_name,
         license         = Symbol(row.license),
     )
+end
+
+"""
+    bm25_search(src, query_text; filters, top_k) -> Vector{Tuple{Chunk, Float32}}
+
+BM25 full-text search over the `text` column. Returns chunks with raw BM25 scores,
+ordered by score descending. `filters` supports keys: `"content_type"`,
+`"document_type"`, `"system"`, `"doc_id"`.
+"""
+function bm25_search(src::Source, query_text::AbstractString;
+                     top_k::Int=10,
+                     filters::Dict{String,Any}=Dict{String,Any}())
+    db = DBInterface.connect(DuckDB.DB, src.db_path)
+    try
+        DuckDB.query(db, "LOAD fts")
+
+        where_parts = ["score IS NOT NULL"]
+        filter_vals = Any[]
+        for (col, val) in filters
+            col in ("content_type", "document_type", "system", "doc_id") ||
+                error("unsupported filter column: $col")
+            push!(where_parts, "$col = ?")
+            push!(filter_vals, String(val))
+        end
+        where_clause = "WHERE " * join(where_parts, " AND ")
+
+        # match_bm25 requires a string literal; escape single quotes.
+        escaped = replace(String(query_text), "'" => "''")
+        sql = """
+            SELECT id, source_id, doc_id, doc_path, text, embedding::FLOAT[] AS embedding,
+                   embedding_model, token_count, content_hash, document_type, system,
+                   edition, page, heading_path, chunk_order, parent_id, content_type, tags,
+                   move_trigger, scene_type, encounter_key, npc_name, license,
+                   fts_main_chunks.match_bm25(id, '$escaped') AS score
+            FROM chunks
+            $where_clause
+            ORDER BY score DESC
+            LIMIT $top_k
+        """
+        results = Tuple{Chunk,Float32}[]
+        row_iter = isempty(filter_vals) ? DuckDB.execute(db, sql) : DuckDB.execute(db, sql, filter_vals)
+        for row in row_iter
+            push!(results, (_row_to_chunk(row), Float32(row.score)))
+        end
+        return results
+    finally
+        DBInterface.close!(db)
+    end
 end
