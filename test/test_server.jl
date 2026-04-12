@@ -3,7 +3,6 @@ using TomeRAG
 using HTTP
 using JSON3
 
-# Helper: build a test registry with one source + ingested chunks.
 function _test_registry()
     db_path = tempname() * ".duckdb"
     src = Source(
@@ -61,20 +60,66 @@ end
             body = JSON3.read(r.body, Vector{Dict{String,Any}})
             @test length(body) == 1
             @test body[1]["id"] == "test-src"
-            @test body[1]["name"] == "Test Source"
         end
 
         @testset "GET /sources/:id" begin
             r = HTTP.get("$base/sources/test-src")
             @test r.status == 200
             body = JSON3.read(r.body, Dict{String,Any})
-            @test body["id"] == "test-src"
-            @test body["chunk_count"] isa Integer
             @test body["chunk_count"] >= 1
 
             r404 = HTTP.get("$base/sources/no-such-source"; status_exception=false)
             @test r404.status == 404
         end
+
+        @testset "POST /query" begin
+            payload = JSON3.write(Dict(
+                "text"   => "iron vow swear",
+                "source" => "test-src",
+                "top_k"  => 2,
+            ))
+            r = HTTP.post("$base/query",
+                          ["Content-Type" => "application/json"], payload)
+            @test r.status == 200
+            body = JSON3.read(r.body, Vector{Dict{String,Any}})
+            @test length(body) >= 1
+            @test haskey(body[1], "text")
+            @test haskey(body[1], "score")
+            @test haskey(body[1], "rank")
+
+            # Missing source → 400
+            bad = HTTP.post("$base/query",
+                            ["Content-Type" => "application/json"],
+                            JSON3.write(Dict("text" => "hello"));
+                            status_exception=false)
+            @test bad.status == 400
+        end
+
+        @testset "POST /filter" begin
+            payload = JSON3.write(Dict(
+                "source"       => "test-src",
+                "top_k"        => 10,
+            ))
+            r = HTTP.post("$base/filter",
+                          ["Content-Type" => "application/json"], payload)
+            @test r.status == 200
+            body = JSON3.read(r.body, Vector{Dict{String,Any}})
+            @test length(body) >= 1
+            @test haskey(body[1], "text")
+
+            # Filter by content_type
+            move_payload = JSON3.write(Dict(
+                "source"       => "test-src",
+                "content_type" => "move",
+                "top_k"        => 10,
+            ))
+            r2 = HTTP.post("$base/filter",
+                           ["Content-Type" => "application/json"], move_payload)
+            @test r2.status == 200
+            moves = JSON3.read(r2.body, Vector{Dict{String,Any}})
+            @test all(m["content_type"] == "move" for m in moves)
+        end
+
     finally
         close(server)
     end

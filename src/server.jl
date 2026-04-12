@@ -8,7 +8,8 @@ using DBInterface
 
 Start the TomeRAG REST API server.
 - `async=true` returns a closeable handle (use `close(server)` to stop).
-- `embed_backend` is required for /query, /lookup, /multi_query endpoints.
+- `embed_backend` is required for endpoints that embed text (/query, /lookup, /multi_query).
+  Pass a `MockEmbeddingBackend` for tests or an `OllamaBackend` for production.
 """
 function serve(registry::SourceRegistry;
                port::Int=8080,
@@ -36,6 +37,41 @@ function _setup_routes!(registry::SourceRegistry,
         src = get_source(registry, id)
         stats = source_stats(src)
         return merge(_source_info(src), Dict("chunk_count" => stats.chunk_count))
+    end
+
+    @post "/query" function(req::HTTP.Request)
+        isnothing(embed_backend) && return _error(501, "no embed_backend configured")
+        body = try JSON3.read(req.body, Dict{String,Any}) catch; return _error(400, "invalid JSON") end
+        haskey(body, "text")   || return _error(400, "missing field: text")
+        haskey(body, "source") || return _error(400, "missing field: source")
+        source = body["source"]
+        haskey(registry.sources, source) || return _error(404, "source not found: $source")
+        top_k           = Int(get(body, "top_k", 5))
+        score_threshold = Float32(get(body, "score_threshold", 0.0))
+        content_type    = haskey(body, "content_type")  ? Symbol(body["content_type"])  : nothing
+        document_type   = haskey(body, "document_type") ? Symbol(body["document_type"]) : nothing
+        mode            = haskey(body, "mode")           ? Symbol(body["mode"])          : :hybrid
+        results = query(registry, String(body["text"]);
+                        source=source, content_type=content_type,
+                        document_type=document_type, top_k=top_k,
+                        score_threshold=score_threshold,
+                        embed_backend=embed_backend, mode=mode)
+        return [_result_dict(r) for r in results]
+    end
+
+    @post "/filter" function(req::HTTP.Request)
+        body = try JSON3.read(req.body, Dict{String,Any}) catch; return _error(400, "invalid JSON") end
+        haskey(body, "source") || return _error(400, "missing field: source")
+        source = body["source"]
+        haskey(registry.sources, source) || return _error(404, "source not found: $source")
+        content_type  = haskey(body, "content_type")  ? Symbol(body["content_type"])  : nothing
+        document_type = haskey(body, "document_type") ? Symbol(body["document_type"]) : nothing
+        top_k  = Int(get(body, "top_k", 100))
+        offset = Int(get(body, "offset", 0))
+        chunks = filter_chunks(registry, source;
+                               content_type=content_type, document_type=document_type,
+                               top_k=top_k, offset=offset)
+        return [_chunk_dict(c) for c in chunks]
     end
 end
 
