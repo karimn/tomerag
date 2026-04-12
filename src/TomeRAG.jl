@@ -4,6 +4,7 @@ include("content_types.jl")
 include("types.jl")
 include("tokenize.jl")
 include("backends.jl")
+include("chunker.jl")
 
 export DEFAULT_CONTENT_TYPES, PBTA_CONTENT_TYPES, YZE_CONTENT_TYPES
 export Chunk, QueryResult, ChunkingConfig

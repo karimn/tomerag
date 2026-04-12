@@ -8,4 +8,6 @@ using TomeRAG
     include("test_backends.jl")
     include("test_ollama.jl")
     include("test_heuristic.jl")
+    include("test_chunker.jl")
+    include("test_splitter.jl")
 end
