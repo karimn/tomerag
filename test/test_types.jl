@@ -1,5 +1,5 @@
 using Test
-using TomeRAG: Chunk, QueryResult, ChunkingConfig
+using TomeRAG: Chunk, QueryResult, ChunkingConfig, DEFAULT_CONTENT_TYPES, Source, SourceRegistry, register_source!, get_source
 
 @testset "types" begin
     cfg = ChunkingConfig()
@@ -40,4 +40,23 @@ using TomeRAG: Chunk, QueryResult, ChunkingConfig
     r = QueryResult(c, 0.9f0, 1)
     @test r.score == 0.9f0
     @test r.rank == 1
+end
+
+@testset "source registry" begin
+    s = Source(
+        id              = "coriolis",
+        name            = "Coriolis: The Great Dark",
+        system          = "YZE",
+        db_path         = tempname() * ".duckdb",
+        embedding_model = "mock",
+        embedding_dim   = 4,
+        license         = :homebrew,
+        chunking        = ChunkingConfig(),
+        content_types   = DEFAULT_CONTENT_TYPES,
+    )
+    reg = SourceRegistry()
+    register_source!(reg, s)
+    @test get_source(reg, "coriolis").name == "Coriolis: The Great Dark"
+    @test_throws KeyError get_source(reg, "nope")
+    @test_throws ErrorException register_source!(reg, s)  # duplicate id
 end

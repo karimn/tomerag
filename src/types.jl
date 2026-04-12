@@ -42,3 +42,31 @@ struct QueryResult
     score::Float32
     rank::Int
 end
+
+Base.@kwdef struct Source
+    id::String
+    name::String
+    system::String
+    db_path::String
+    embedding_model::String
+    embedding_dim::Int
+    license::Symbol
+    chunking::ChunkingConfig
+    content_types::Set{Symbol}
+end
+
+struct SourceRegistry
+    sources::Dict{String,Source}
+end
+SourceRegistry() = SourceRegistry(Dict{String,Source}())
+
+function register_source!(reg::SourceRegistry, s::Source)
+    haskey(reg.sources, s.id) && error("source id already registered: $(s.id)")
+    reg.sources[s.id] = s
+    return s
+end
+
+function get_source(reg::SourceRegistry, id::AbstractString)
+    haskey(reg.sources, id) || throw(KeyError(id))
+    return reg.sources[id]
+end
