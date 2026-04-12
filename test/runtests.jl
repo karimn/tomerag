@@ -11,4 +11,5 @@ using TomeRAG
     include("test_chunker.jl")
     include("test_splitter.jl")
     include("test_storage.jl")
+    include("test_ingest.jl")
 end

@@ -6,6 +6,7 @@ include("tokenize.jl")
 include("backends.jl")
 include("chunker.jl")
 include("storage.jl")
+include("ingest.jl")
 
 export DEFAULT_CONTENT_TYPES, PBTA_CONTENT_TYPES, YZE_CONTENT_TYPES
 export Chunk, QueryResult, ChunkingConfig
@@ -15,6 +16,7 @@ export EmbeddingBackend, ClassifyBackend,
        OllamaBackend, HeuristicBackend,
        embed, classify
 export split_to_token_budget
-export initialize_store, insert_chunks, source_stats
+export initialize_store, insert_chunks, source_stats, similarity_search
+export ingest!
 
 end # module
