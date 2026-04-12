@@ -12,4 +12,6 @@ using TomeRAG
     include("test_splitter.jl")
     include("test_storage.jl")
     include("test_ingest.jl")
+    include("test_query.jl")
+    include("test_integration.jl")
 end

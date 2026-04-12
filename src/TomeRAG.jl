@@ -7,6 +7,7 @@ include("backends.jl")
 include("chunker.jl")
 include("storage.jl")
 include("ingest.jl")
+include("query_engine.jl")
 
 export DEFAULT_CONTENT_TYPES, PBTA_CONTENT_TYPES, YZE_CONTENT_TYPES
 export Chunk, QueryResult, ChunkingConfig
@@ -18,5 +19,6 @@ export EmbeddingBackend, ClassifyBackend,
 export split_to_token_budget
 export initialize_store, insert_chunks, source_stats, similarity_search
 export ingest!
+export query
 
 end # module
