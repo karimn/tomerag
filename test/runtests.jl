@@ -14,4 +14,5 @@ using TomeRAG
     include("test_ingest.jl")
     include("test_query.jl")
     include("test_integration.jl")
+    include("test_server.jl")
 end
