@@ -56,3 +56,86 @@ function parse_markdown_sections(md::AbstractString)
     flush!()
     return sections
 end
+
+"""
+    split_to_token_budget(text; max_tokens, overlap_tokens, overflow) -> Vector{String}
+
+If text fits in `max_tokens`, returns `[text]`. Otherwise applies the overflow
+ladder: `:paragraph` → `:sentence` → `:token`. `overlap_tokens` of trailing
+tokens from one piece are prepended to the next.
+"""
+function split_to_token_budget(text::AbstractString; max_tokens::Int,
+                               overlap_tokens::Int=0, overflow::Symbol=:paragraph)
+    toks = split(text)
+    if length(toks) <= max_tokens
+        return [String(text)]
+    end
+
+    # Try paragraph splits first.
+    if overflow == :paragraph
+        paras = split(text, r"\n\s*\n")
+        pieces = _greedy_pack(paras, max_tokens)
+        if all(length(split(p)) <= max_tokens for p in pieces)
+            return _apply_overlap(pieces, overlap_tokens)
+        end
+        overflow = :sentence
+    end
+
+    if overflow == :sentence
+        sents = split(text, r"(?<=[.!?])\s+")
+        pieces = _greedy_pack(sents, max_tokens)
+        if all(length(split(p)) <= max_tokens for p in pieces)
+            return _apply_overlap(pieces, overlap_tokens)
+        end
+        overflow = :token
+    end
+
+    # Hard token cap.
+    pieces = String[]
+    i = 1
+    while i <= length(toks)
+        j = min(i + max_tokens - 1, length(toks))
+        push!(pieces, join(toks[i:j], " "))
+        i = j + 1
+    end
+    return _apply_overlap(pieces, overlap_tokens)
+end
+
+function _greedy_pack(units::AbstractVector, max_tokens::Int)
+    out = String[]
+    cur = IOBuffer()
+    cur_tokens = 0
+    for u in units
+        u_str = strip(String(u))
+        isempty(u_str) && continue
+        u_tokens = length(split(u_str))
+        if cur_tokens + u_tokens > max_tokens && cur_tokens > 0
+            push!(out, strip(String(take!(cur))))
+            cur_tokens = 0
+        end
+        if u_tokens > max_tokens
+            cur_tokens > 0 && push!(out, strip(String(take!(cur))))
+            push!(out, u_str)
+            cur_tokens = 0
+        else
+            cur_tokens > 0 && print(cur, " ")
+            print(cur, u_str)
+            cur_tokens += u_tokens
+        end
+    end
+    cur_tokens > 0 && push!(out, strip(String(take!(cur))))
+    return out
+end
+
+function _apply_overlap(pieces::Vector{String}, overlap_tokens::Int)
+    overlap_tokens <= 0 && return pieces
+    length(pieces) <= 1 && return pieces
+    out = Vector{String}(undef, length(pieces))
+    out[1] = pieces[1]
+    for i in 2:length(pieces)
+        prev_toks = split(pieces[i-1])
+        tail = prev_toks[max(end - overlap_tokens + 1, 1):end]
+        out[i] = join(tail, " ") * " " * pieces[i]
+    end
+    return out
+end

@@ -13,5 +13,6 @@ export EmbeddingBackend, ClassifyBackend,
        MockEmbeddingBackend, MockClassifyBackend,
        OllamaBackend, HeuristicBackend,
        embed, classify
+export split_to_token_budget
 
 end # module
