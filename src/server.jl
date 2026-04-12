@@ -58,6 +58,7 @@ function _source_info(src::Source)
     )
 end
 
+# Used by /query, /lookup, /multi_query routes (Task 6+)
 function _chunk_dict(c::Chunk)
     return Dict(
         "id"            => c.id,
