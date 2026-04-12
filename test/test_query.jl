@@ -45,3 +45,47 @@ using TomeRAG: query, SourceRegistry, register_source!, Source, ChunkingConfig,
                   embed_backend=MockEmbeddingBackend(dim=8))
     @test all(r.chunk.content_type == :move for r in moves)
 end
+
+@testset "query() hybrid mode (RRF)" begin
+    db = tempname() * ".duckdb"
+    src = Source(
+        id = "hybrid-test",
+        name = "Hybrid Test",
+        system = "PbtA",
+        db_path = db,
+        embedding_model = "mock",
+        embedding_dim = 8,
+        license = :homebrew,
+        chunking = ChunkingConfig(min_tokens=1, max_tokens=200),
+        content_types = DEFAULT_CONTENT_TYPES,
+    )
+    reg = SourceRegistry()
+    register_source!(reg, src)
+    initialize_store(src)
+
+    md_path = tempname() * ".md"
+    write(md_path, """
+    # Rules
+    ## Iron Vow
+    **When you swear an iron vow**, roll +heart.
+    ## Face Danger
+    **When you face danger**, roll +edge.
+    """)
+    ingest!(reg, "hybrid-test", md_path;
+            doc_id = "hybrid-doc", document_type = :core_rules, format = :markdown,
+            embed_backend = MockEmbeddingBackend(dim=8),
+            classify_backend = HeuristicBackend())
+
+    # Hybrid mode (default) should return results
+    results = query(reg, "iron vow heart";
+                    source = "hybrid-test", top_k = 2,
+                    embed_backend = MockEmbeddingBackend(dim=8))
+    @test length(results) >= 1
+    @test results[1].rank == 1
+
+    # Dense-only mode still works
+    dense_results = query(reg, "iron vow heart";
+                          source = "hybrid-test", top_k = 2, mode = :dense,
+                          embed_backend = MockEmbeddingBackend(dim=8))
+    @test length(dense_results) >= 1
+end
