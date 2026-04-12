@@ -73,6 +73,72 @@ function _setup_routes!(registry::SourceRegistry,
                                top_k=top_k, offset=offset)
         return [_chunk_dict(c) for c in chunks]
     end
+
+    @get "/lookup" function(req::HTTP.Request)
+        isnothing(embed_backend) && return _error(501, "no embed_backend configured")
+        params = HTTP.queryparams(HTTP.URI(req.target))
+        haskey(params, "name")   || return _error(400, "missing query param: name")
+        haskey(params, "source") || return _error(400, "missing query param: source")
+        source = params["source"]
+        haskey(registry.sources, source) || return _error(404, "source not found: $source")
+        content_type = haskey(params, "content_type") ? Symbol(params["content_type"]) : nothing
+        results = lookup(registry, params["name"];
+                         source=source, content_type=content_type)
+        return [_result_dict(r) for r in results]
+    end
+
+    @post "/multi_query" function(req::HTTP.Request)
+        isnothing(embed_backend) && return _error(501, "no embed_backend configured")
+        body = try JSON3.read(req.body, Dict{String,Any}) catch; return _error(400, "invalid JSON") end
+        haskey(body, "queries") || return _error(400, "missing field: queries")
+        top_k = Int(get(body, "top_k", 10))
+        queries = Tuple{String,NamedTuple}[]
+        for q in body["queries"]
+            haskey(q, "text")   || return _error(400, "each query needs 'text'")
+            haskey(q, "source") || return _error(400, "each query needs 'source'")
+            source = String(q["source"])
+            haskey(registry.sources, source) || return _error(404, "source not found: $source")
+            kwargs = (source=source,)
+            push!(queries, (String(q["text"]), kwargs))
+        end
+        results = multi_query(registry, queries;
+                              embed_backend=embed_backend, top_k=top_k)
+        return [_result_dict(r) for r in results]
+    end
+
+    @get "/chunk/{id}" function(req::HTTP.Request, id::String)
+        for src in values(registry.sources)
+            db = DBInterface.connect(DuckDB.DB, src.db_path)
+            try
+                for row in DuckDB.execute(db,
+                        """SELECT id, source_id, doc_id, doc_path, text,
+                                  embedding::FLOAT[] AS embedding,
+                                  embedding_model, token_count, content_hash,
+                                  document_type, system, edition, page,
+                                  heading_path, chunk_order, parent_id,
+                                  content_type, tags, move_trigger,
+                                  scene_type, encounter_key, npc_name, license
+                           FROM chunks WHERE id = ? LIMIT 1""",
+                        (id,))
+                    return _chunk_dict(_row_to_chunk(row))
+                end
+            finally
+                DBInterface.close!(db)
+            end
+        end
+        return _error(404, "chunk not found: $id")
+    end
+
+    @get "/chunk/{id}/context" function(req::HTTP.Request, id::String)
+        params = HTTP.queryparams(HTTP.URI(req.target))
+        haskey(params, "source") || return _error(400, "missing query param: source")
+        source = params["source"]
+        haskey(registry.sources, source) || return _error(404, "source not found: $source")
+        before = haskey(params, "before") ? parse(Int, params["before"]) : 1
+        after  = haskey(params, "after")  ? parse(Int, params["after"])  : 1
+        chunks = get_context(registry, id; source=source, before=before, after=after)
+        return [_chunk_dict(c) for c in chunks]
+    end
 end
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

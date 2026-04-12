@@ -121,6 +121,61 @@ end
             @test all(m["content_type"] == "move" for m in moves)
         end
 
+        @testset "GET /lookup" begin
+            r = HTTP.get("$base/lookup?name=Iron+Vow&source=test-src")
+            @test r.status == 200
+            body = JSON3.read(r.body, Vector{Dict{String,Any}})
+            @test length(body) >= 1
+            @test any(occursin("iron", lowercase(b["text"])) for b in body)
+
+            # Missing name → 400
+            bad = HTTP.get("$base/lookup?source=test-src"; status_exception=false)
+            @test bad.status == 400
+        end
+
+        @testset "POST /multi_query" begin
+            payload = JSON3.write(Dict(
+                "queries" => [
+                    Dict("text" => "iron vow heart", "source" => "test-src"),
+                    Dict("text" => "face danger risk", "source" => "test-src"),
+                ],
+                "top_k" => 5,
+            ))
+            r = HTTP.post("$base/multi_query",
+                          ["Content-Type" => "application/json"], payload)
+            @test r.status == 200
+            body = JSON3.read(r.body, Vector{Dict{String,Any}})
+            @test length(body) >= 1
+            ids = [b["id"] for b in body]
+            @test length(ids) == length(unique(ids))  # no duplicates
+        end
+
+        @testset "GET /chunk/:id and /chunk/:id/context" begin
+            # First get a chunk id via /filter
+            fr = HTTP.post("$base/filter",
+                           ["Content-Type" => "application/json"],
+                           JSON3.write(Dict("source" => "test-src", "top_k" => 1)))
+            first_chunk = JSON3.read(fr.body, Vector{Dict{String,Any}})[1]
+            chunk_id = first_chunk["id"]
+
+            # Fetch single chunk
+            r = HTTP.get("$base/chunk/$chunk_id")
+            @test r.status == 200
+            body = JSON3.read(r.body, Dict{String,Any})
+            @test body["id"] == chunk_id
+
+            # 404 for unknown
+            r404 = HTTP.get("$base/chunk/no-such-id"; status_exception=false)
+            @test r404.status == 404
+
+            # Fetch context
+            rc = HTTP.get("$base/chunk/$chunk_id/context?source=test-src&before=1&after=1")
+            @test rc.status == 200
+            ctx = JSON3.read(rc.body, Vector{Dict{String,Any}})
+            @test length(ctx) >= 1
+            @test any(c["id"] == chunk_id for c in ctx)
+        end
+
     finally
         close(server)
     end
