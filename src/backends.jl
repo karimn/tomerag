@@ -232,9 +232,10 @@ function _build_batch_prompt(backend::ClaudeBackend, batch::Vector{RawChunk})
     return String(take!(io))
 end
 
-function _parse_classification(item)
+function _parse_classification(item, content_types::Set{Symbol})
     ct = get(item, "content_type", nothing)
-    content_type = isnothing(ct) ? :mechanic : Symbol(ct)
+    sym = isnothing(ct) ? :mechanic : Symbol(ct)
+    content_type = sym in content_types ? sym : :mechanic
 
     raw_tags = get(item, "tags", nothing)
     tags = isnothing(raw_tags) ? String[] : String[String(t) for t in raw_tags]
@@ -273,8 +274,16 @@ function classify_batch(backend::ClaudeBackend, raws::Vector{RawChunk})
                           system   = system)
             text   = resp.content[1].text
             parsed = JSON3.read(text)
-            for (i, item) in enumerate(parsed)
-                results[chunk_start + i - 1] = _parse_classification(item)
+            if length(parsed) != length(batch)
+                @warn "ClaudeBackend: expected $(length(batch)) items, got $(length(parsed)); falling back" batch_start=chunk_start
+                for (i, raw) in enumerate(batch)
+                    results[chunk_start + i - 1] = classify(fallback; text=raw.text,
+                                                             heading_path=raw.heading_path)
+                end
+            else
+                for (i, item) in enumerate(parsed)
+                    results[chunk_start + i - 1] = _parse_classification(item, backend.content_types)
+                end
             end
         catch e
             @warn "ClaudeBackend batch failed, using HeuristicBackend fallback" exception=e
