@@ -332,7 +332,7 @@ end
 # Conservative fallback when LiteLLM pricing fetch fails (Sonnet rates).
 const _FALLBACK_PRICING = (input=3.00f0, output=15.00f0)  # USD per MTok
 
-const _PRICING_CACHE = Ref{Union{Dict,Nothing}}(nothing)
+const _PRICING_CACHE = Ref{Union{Dict{String,Any},Nothing}}(nothing)
 
 function _fetch_pricing()
     isnothing(_PRICING_CACHE[]) || return _PRICING_CACHE[]
@@ -352,10 +352,10 @@ function _model_pricing(model::String)
     data = _fetch_pricing()
     if !isnothing(data) && haskey(data, model)
         entry = data[model]
-        if haskey(entry, :input_cost_per_token) && haskey(entry, :output_cost_per_token)
+        if haskey(entry, "input_cost_per_token") && haskey(entry, "output_cost_per_token")
             return (
-                input  = Float32(entry[:input_cost_per_token]  * 1_000_000),
-                output = Float32(entry[:output_cost_per_token] * 1_000_000),
+                input  = Float32(entry["input_cost_per_token"]  * 1_000_000),
+                output = Float32(entry["output_cost_per_token"] * 1_000_000),
             )
         end
     end
