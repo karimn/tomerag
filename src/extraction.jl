@@ -18,7 +18,9 @@ end
 Extract all pages from `pdf_path` using `backend`. Returns one `PageText` per page,
 ordered by page number.
 """
-function extract_pages end
+function extract_pages(::ExtractionBackend, path::AbstractString)
+    error("extract_pages not implemented for this backend")
+end
 
 """
     extract_page(backend, pdf_path, page_num) -> PageText

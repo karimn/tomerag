@@ -1,5 +1,4 @@
 using Test
-using TomeRAG
 using TomeRAG: extract_pages, extract_page, PageText
 
 @testset "MockExtractionBackend" begin
@@ -18,4 +17,7 @@ using TomeRAG: extract_pages, extract_page, PageText
     p = extract_page(b, "any/path.pdf", 2)
     @test p.page_num == 2
     @test p.text == "# Face Danger\nRoll +edge."
+
+    # extract_page raises an error when page_num is not in results
+    @test_throws ErrorException extract_page(b, "any/path.pdf", 99)
 end
