@@ -201,7 +201,8 @@ function _call_vision_api(backend::VisionBackend, png_bytes::Vector{UInt8}, page
          "anthropic-version" => "2023-06-01",
          "content-type"      => "application/json"],
         JSON3.write(body);
-        readtimeout = 120,
+        readtimeout      = 120,
+        status_exception = false,
     )
     HTTP.iserror(resp) &&
         error("Anthropic API error $(resp.status): $(String(resp.body))")
