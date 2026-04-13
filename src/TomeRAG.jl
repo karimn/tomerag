@@ -16,7 +16,7 @@ export Chunk, QueryResult, ChunkingConfig
 export Source, SourceRegistry, register_source!, get_source
 export EmbeddingBackend, ClassifyBackend,
        MockEmbeddingBackend, MockClassifyBackend,
-       OllamaBackend, HeuristicBackend,
+       OllamaBackend, HeuristicBackend, ClaudeBackend,
        embed, classify, classify_batch
 export ExtractionBackend, PageText, extract_pages, extract_page
 export MockExtractionBackend, PopplerBackend, CachingBackend, VisionBackend

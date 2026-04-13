@@ -192,6 +192,107 @@ function classify(h::HeuristicBackend; text, heading_path)
             scene_type=nothing, encounter_key=nothing, npc_name=nothing)
 end
 
+# ---- ClaudeBackend -----------------------------------------------------------
+
+Base.@kwdef struct ClaudeBackend <: ClassifyBackend
+    model         :: String      = "claude-haiku-4-5-20251001"
+    api_key       :: String      = _get_anthropic_key()
+    batch_size    :: Int         = 20
+    content_types :: Set{Symbol}           # required — source-specific valid types
+    system_hint   :: String      = ""      # e.g. "PbtA", "YZE" — added to the system prompt
+end
+
+function _build_system_prompt(backend::ClaudeBackend)
+    hint = isempty(backend.system_hint) ? "" : " ($(backend.system_hint) system)"
+    return "You are classifying chunks of text from an RPG rulebook$(hint). " *
+           "Return ONLY a JSON array with no commentary, markdown, or code fences."
+end
+
+function _build_batch_prompt(backend::ClaudeBackend, batch::Vector{RawChunk})
+    types_str = join(sort(collect(backend.content_types), by=string), ", ")
+    io = IOBuffer()
+    println(io, "Classify these RPG rulebook chunks. Return a JSON array, one object per chunk, in order.")
+    println(io)
+    println(io, "Valid content_types: $types_str")
+    println(io)
+    println(io, "Each object must have these fields:")
+    println(io, "  content_type  : one of the valid types above (string)")
+    println(io, "  tags          : array of relevant keyword strings (may be empty)")
+    println(io, "  move_trigger  : the trigger phrase if content_type is \"move\", else null")
+    println(io, "  scene_type    : scene category if applicable, else null")
+    println(io, "  encounter_key : encounter identifier if applicable, else null")
+    println(io, "  npc_name      : NPC name if content_type is \"stat_block\", else null")
+    println(io)
+    for (i, raw) in enumerate(batch)
+        heading = isempty(raw.heading_path) ? "(no heading)" : join(raw.heading_path, " / ")
+        println(io, "[$i] heading: $heading")
+        println(io, "text: $(raw.text)")
+        println(io)
+    end
+    return String(take!(io))
+end
+
+function _parse_classification(item)
+    ct = get(item, "content_type", nothing)
+    content_type = isnothing(ct) ? :mechanic : Symbol(ct)
+
+    raw_tags = get(item, "tags", nothing)
+    tags = isnothing(raw_tags) ? String[] : String[String(t) for t in raw_tags]
+
+    raw_trigger = get(item, "move_trigger", nothing)
+    move_trigger = (isnothing(raw_trigger) || raw_trigger == "null") ? nothing : String(raw_trigger)
+
+    raw_scene = get(item, "scene_type", nothing)
+    scene_type = (isnothing(raw_scene) || raw_scene == "null") ? nothing : Symbol(raw_scene)
+
+    raw_enc = get(item, "encounter_key", nothing)
+    encounter_key = (isnothing(raw_enc) || raw_enc == "null") ? nothing : String(raw_enc)
+
+    raw_npc = get(item, "npc_name", nothing)
+    npc_name = (isnothing(raw_npc) || raw_npc == "null") ? nothing : String(raw_npc)
+
+    return (content_type=content_type, tags=tags, move_trigger=move_trigger,
+            scene_type=scene_type, encounter_key=encounter_key, npc_name=npc_name)
+end
+
+function classify_batch(backend::ClaudeBackend, raws::Vector{RawChunk})
+    isempty(raws) && return NamedTuple[]
+    fallback = HeuristicBackend()
+    client   = Anthropic(api_key=backend.api_key)
+    system   = _build_system_prompt(backend)
+    results  = Vector{NamedTuple}(undef, length(raws))
+
+    for chunk_start in 1:backend.batch_size:length(raws)
+        batch = raws[chunk_start:min(chunk_start + backend.batch_size - 1, length(raws))]
+        prompt = _build_batch_prompt(backend, batch)
+        try
+            resp = create(client.messages;
+                          model    = backend.model,
+                          messages = [Message("user", prompt)],
+                          max_tokens = 2048,
+                          system   = system)
+            text   = resp.content[1].text
+            parsed = JSON3.read(text)
+            for (i, item) in enumerate(parsed)
+                results[chunk_start + i - 1] = _parse_classification(item)
+            end
+        catch e
+            @warn "ClaudeBackend batch failed, using HeuristicBackend fallback" exception=e
+            for (i, raw) in enumerate(batch)
+                results[chunk_start + i - 1] = classify(fallback; text=raw.text,
+                                                         heading_path=raw.heading_path)
+            end
+        end
+    end
+    return collect(results)
+end
+
+# Single-item classify delegates to classify_batch so ClaudeBackend satisfies the interface.
+function classify(backend::ClaudeBackend; text, heading_path)
+    raw = RawChunk(heading_path=heading_path, text=text, chunk_order=0)
+    return classify_batch(backend, [raw])[1]
+end
+
 # ---- mock extraction backend -------------------------------------------------
 
 """

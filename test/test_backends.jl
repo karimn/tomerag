@@ -52,6 +52,71 @@ end
 end
 
 using TomeRAG: classify_batch, RawChunk
+using TomeRAG: ClaudeBackend, _build_batch_prompt
+
+@testset "ClaudeBackend — constructs with required fields" begin
+    b = ClaudeBackend(
+        api_key       = "sk-fake",
+        content_types = Set([:move, :mechanic, :lore]),
+    )
+    @test b.model == "claude-haiku-4-5-20251001"
+    @test b.batch_size == 20
+    @test :move in b.content_types
+end
+
+@testset "_build_batch_prompt — structure" begin
+    b = ClaudeBackend(
+        api_key       = "sk-fake",
+        content_types = Set([:move, :mechanic, :lore]),
+        system_hint   = "PbtA",
+    )
+    raws = [
+        RawChunk(heading_path=["Chapter 3", "Iron Vow"],
+                 text="**When you swear upon iron**, roll +heart.",
+                 chunk_order=1),
+        RawChunk(heading_path=["The World"],
+                 text="The Ironlands are cold.",
+                 chunk_order=2),
+    ]
+    prompt = _build_batch_prompt(b, raws)
+    @test occursin("[1]", prompt)
+    @test occursin("[2]", prompt)
+    @test occursin("Iron Vow", prompt)
+    @test occursin("move", prompt)        # content type listed
+    @test occursin("mechanic", prompt)
+    @test occursin("content_type", prompt)
+    @test occursin("move_trigger", prompt)
+end
+
+@testset "ClaudeBackend — classify_batch live (requires API key + TOMERAG_LIVE_TESTS=1)" begin
+    if get(ENV, "TOMERAG_LIVE_TESTS", "0") != "1" || !haskey(ENV, "ANTHROPIC_API_KEY")
+        @test_skip "Set TOMERAG_LIVE_TESTS=1 and ANTHROPIC_API_KEY to run"
+    else
+        b = ClaudeBackend(
+            content_types = Set([:move, :mechanic, :lore, :stat_block, :table,
+                                 :gm_guidance, :flavor, :procedure, :boxed_text]),
+            system_hint   = "PbtA",
+        )
+        raws = [
+            RawChunk(heading_path=["Moves", "Iron Vow"],
+                     text="**When you swear upon iron**, roll +heart. On a 10+, your vow is strong.",
+                     chunk_order=1),
+            RawChunk(heading_path=["Bestiary", "Troll"],
+                     text="HP 30, Armor 1, Attack: Club 2d6. Regenerates 2 HP per round.",
+                     chunk_order=2),
+            RawChunk(heading_path=["The World", "History"],
+                     text="The Ironlands were settled generations ago by refugees fleeing the Old World.",
+                     chunk_order=3),
+        ]
+        results = classify_batch(b, raws)
+        @test length(results) == 3
+        for r in results
+            @test r.content_type in b.content_types
+        end
+        # Move chunk should be classified as :move
+        @test results[1].content_type == :move
+    end
+end
 
 @testset "classify_batch default — same result as classify loop" begin
     b = HeuristicBackend()
