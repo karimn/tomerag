@@ -70,5 +70,7 @@ end
 function extract_page(::PopplerBackend, pdf_path::AbstractString, page_num::Int)
     isnothing(_PDFTOTEXT) && error("pdftotext not found; install Poppler")
     output = readchomp(`$(_PDFTOTEXT) -layout -f $page_num -l $page_num $(pdf_path) -`)
-    return PageText(page_num=page_num, text=String(strip(output)))
+    text = strip(output)
+    isempty(text) && error("page $page_num is blank or out of range in $pdf_path")
+    return PageText(page_num=page_num, text=String(text))
 end
