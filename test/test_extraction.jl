@@ -1,5 +1,5 @@
 using Test
-using TomeRAG: extract_pages, extract_page, PageText, _split_pdftext, MockExtractionBackend, PopplerBackend
+using TomeRAG: extract_pages, extract_page, PageText, _split_pdftext, MockExtractionBackend, PopplerBackend, CachingBackend, ExtractionBackend
 
 @testset "MockExtractionBackend" begin
     pages = [PageText(1, "# Iron Vow\nRoll +heart."),
@@ -61,4 +61,73 @@ end
             @warn "Skipping PopplerBackend live test: test/fixtures/test.pdf not found"
         end
     end
+end
+
+@testset "CachingBackend — first call extracts and caches" begin
+    tmpdir = mktempdir()
+    pdf_path = joinpath(tmpdir, "test.pdf")
+    write(pdf_path, "fake pdf bytes for hashing")
+
+    pages = [PageText(page_num=1, text="iron vow text"),
+             PageText(page_num=2, text="face danger text")]
+    inner = MockExtractionBackend(pages)
+    cache = CachingBackend(inner, joinpath(tmpdir, "cache"))
+
+    r1 = extract_pages(cache, pdf_path)
+    @test length(r1) == 2
+    @test r1[1].page_num == 1
+    @test r1[1].text == "iron vow text"
+
+    # Cache files must exist on disk
+    using SHA
+    pdf_hash = bytes2hex(sha256(read(pdf_path)))
+    cache_dir = joinpath(tmpdir, "cache", pdf_hash)
+    @test isfile(joinpath(cache_dir, "page_001.txt"))
+    @test isfile(joinpath(cache_dir, "page_002.txt"))
+    @test read(joinpath(cache_dir, "page_001.txt"), String) == "iron vow text"
+end
+
+@testset "CachingBackend — second call returns from disk (inner not called again)" begin
+    tmpdir = mktempdir()
+    pdf_path = joinpath(tmpdir, "test.pdf")
+    write(pdf_path, "stable content for hash")
+
+    call_count = Ref(0)
+
+    # Counting mock — increments counter on each extract_pages call
+    struct _CountingMock <: ExtractionBackend
+        pages::Vector{PageText}
+        counter::Ref{Int}
+    end
+    TomeRAG.extract_pages(b::_CountingMock, ::AbstractString) = (b.counter[] += 1; b.pages)
+
+    pages = [PageText(page_num=1, text="cached text")]
+    inner = _CountingMock(pages, call_count)
+    cache = CachingBackend(inner, joinpath(tmpdir, "cache"))
+
+    extract_pages(cache, pdf_path)          # populates cache
+    @test call_count[] == 1
+
+    extract_pages(cache, pdf_path)          # should read from disk
+    @test call_count[] == 1                 # NOT incremented again
+end
+
+@testset "CachingBackend — different PDF content → different cache dir" begin
+    tmpdir = mktempdir()
+    p1 = joinpath(tmpdir, "a.pdf"); write(p1, "pdf content A")
+    p2 = joinpath(tmpdir, "b.pdf"); write(p2, "pdf content B")
+
+    pages = [PageText(page_num=1, text="content")]
+    inner = MockExtractionBackend(pages)
+    cache = CachingBackend(inner, joinpath(tmpdir, "cache"))
+
+    extract_pages(cache, p1)
+    extract_pages(cache, p2)
+
+    using SHA
+    h1 = bytes2hex(sha256(read(p1)))
+    h2 = bytes2hex(sha256(read(p2)))
+    @test h1 != h2
+    @test isdir(joinpath(tmpdir, "cache", h1))
+    @test isdir(joinpath(tmpdir, "cache", h2))
 end

@@ -1,3 +1,5 @@
+using SHA
+
 # ── Abstract interface ─────────────────────────────────────────────────────────
 
 abstract type ExtractionBackend end
@@ -73,4 +75,50 @@ function extract_page(::PopplerBackend, pdf_path::AbstractString, page_num::Int)
     text = strip(output)
     isempty(text) && error("page $page_num is blank or out of range in $pdf_path")
     return PageText(page_num=page_num, text=String(text))
+end
+
+# ── CachingBackend ─────────────────────────────────────────────────────────────
+
+"""
+    CachingBackend(inner, cache_dir)
+
+Transparent wrapper around any `ExtractionBackend`. Pages are saved to disk keyed
+by `sha256(pdf_bytes)`, so the cache is valid regardless of filename. On re-ingest
+of the same PDF, the inner backend is never called again.
+
+Cache layout:
+    cache_dir/<sha256_of_pdf>/page_001.txt
+                              page_002.txt
+                              ...
+"""
+struct CachingBackend <: ExtractionBackend
+    inner     :: ExtractionBackend
+    cache_dir :: String
+end
+
+function extract_pages(backend::CachingBackend, pdf_path::AbstractString)
+    pdf_hash  = bytes2hex(sha256(read(pdf_path)))
+    cache_dir = joinpath(backend.cache_dir, pdf_hash)
+
+    # Try reading fully from cache (sequential page_NNN.txt files).
+    if isdir(cache_dir) && isfile(joinpath(cache_dir, "page_001.txt"))
+        cached = PageText[]
+        i = 1
+        while true
+            f = joinpath(cache_dir, "page_$(lpad(i, 3, '0')).txt")
+            isfile(f) || break
+            push!(cached, PageText(page_num=i, text=read(f, String)))
+            i += 1
+        end
+        isempty(cached) || return cached
+    end
+
+    # Cache miss — delegate to inner backend.
+    results = extract_pages(backend.inner, pdf_path)
+
+    mkpath(cache_dir)
+    for pt in results
+        write(joinpath(cache_dir, "page_$(lpad(pt.page_num, 3, '0')).txt"), pt.text)
+    end
+    return results
 end
