@@ -2,7 +2,15 @@
 
 julia_version = "1.10.0"
 manifest_format = "2.0"
-project_hash = "a802b523e9ce85227db79581859b3b3d9c77f808"
+project_hash = "dd9035f6365ea424a1ba259092e4e735109ad215"
+
+[[deps.AnthropicSDK]]
+deps = ["HTTP", "JSON3", "StructTypes"]
+git-tree-sha1 = "fa4695ba07dfcf37dd16682bbc6c23176644748b"
+repo-rev = "main"
+repo-url = "https://github.com/karimn/anthropic-sdk-julia"
+uuid = "71e66b3f-936e-4657-b72b-71f450ab081a"
+version = "0.1.0"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
