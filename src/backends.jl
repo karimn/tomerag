@@ -59,7 +59,7 @@ Each result is a NamedTuple with fields:
 `content_type`, `tags`, `move_trigger`, `scene_type`, `encounter_key`, `npc_name`.
 """
 function classify_batch(backend::ClassifyBackend, raws::Vector{RawChunk})
-    return [classify(backend; text=r.text, heading_path=r.heading_path) for r in raws]
+    return NamedTuple[classify(backend; text=r.text, heading_path=r.heading_path) for r in raws]
 end
 
 # ---- mock embedding backend -------------------------------------------------
@@ -330,7 +330,7 @@ function Base.show(io::IO, e::CostEstimate)
 end
 
 # Conservative fallback when LiteLLM pricing fetch fails (Sonnet rates).
-const _FALLBACK_PRICING = (input=3.00f0, output=15.00f0)  # USD per MTok
+const _FALLBACK_PRICING = (input=3.00f0, output=15.00f0)  # USD per MTok — deliberately conservative (Sonnet rates)
 
 const _PRICING_CACHE = Ref{Union{Dict{String,Any},Nothing}}(nothing)
 
@@ -340,10 +340,13 @@ function _fetch_pricing()
         resp = HTTP.get(
             "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
             readtimeout=10, status_exception=false)
-        HTTP.iserror(resp) && return nothing
+        if HTTP.iserror(resp)
+            _PRICING_CACHE[] = Dict{String,Any}()
+            return _PRICING_CACHE[]
+        end
         _PRICING_CACHE[] = JSON3.read(resp.body, Dict)
     catch
-        _PRICING_CACHE[] = nothing
+        _PRICING_CACHE[] = Dict{String,Any}()
     end
     return _PRICING_CACHE[]
 end
