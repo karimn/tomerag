@@ -53,6 +53,10 @@ end
             p = extract_page(b, fixture, 1)
             @test p.page_num == 1
             @test !isempty(p.text)
+
+            pages = extract_pages(b, fixture)
+            @test length(pages) >= 1
+            @test all(p -> !isempty(p.text), pages)
         else
             @warn "Skipping PopplerBackend live test: test/fixtures/test.pdf not found"
         end
