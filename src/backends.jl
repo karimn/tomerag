@@ -154,3 +154,17 @@ function classify(h::HeuristicBackend; text, heading_path)
     return (content_type=:mechanic, tags=String[], move_trigger=nothing,
             scene_type=nothing, encounter_key=nothing, npc_name=nothing)
 end
+
+# ---- mock extraction backend -------------------------------------------------
+
+"""
+    MockExtractionBackend(pages)
+
+Returns the given `Vector{PageText}` verbatim, ignoring the pdf_path.
+Use in tests to avoid real PDF files or API calls.
+"""
+struct MockExtractionBackend <: ExtractionBackend
+    pages::Vector{PageText}
+end
+
+extract_pages(b::MockExtractionBackend, ::AbstractString) = b.pages

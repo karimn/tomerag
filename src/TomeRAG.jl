@@ -1,5 +1,6 @@
 module TomeRAG
 
+include("extraction.jl")
 include("content_types.jl")
 include("types.jl")
 include("tokenize.jl")
@@ -17,6 +18,8 @@ export EmbeddingBackend, ClassifyBackend,
        MockEmbeddingBackend, MockClassifyBackend,
        OllamaBackend, HeuristicBackend,
        embed, classify
+export ExtractionBackend, PageText, extract_pages, extract_page
+export MockExtractionBackend
 export split_to_token_budget
 export initialize_store, insert_chunks, source_stats, similarity_search, bm25_search
 export ingest!
