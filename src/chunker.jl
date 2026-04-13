@@ -90,14 +90,63 @@ function split_to_token_budget(text::AbstractString; max_tokens::Int,
         overflow = :token
     end
 
-    # Hard token cap.
-    pieces = String[]
-    i = 1
-    while i <= length(toks)
-        j = min(i + max_tokens - 1, length(toks))
-        push!(pieces, join(toks[i:j], " "))
-        i = j + 1
+    # Hard token cap — line-aware, treats markdown table runs as atomic.
+    doc_lines  = split(text, '\n'; keepempty = true)
+    cur_lines  = String[]
+    cur_tokens = 0
+    pieces     = String[]
+    i_line     = 1
+
+    while i_line <= length(doc_lines)
+        line = doc_lines[i_line]
+
+        if startswith(lstrip(line), "|")
+            # Collect the entire table run atomically.
+            tbl_lines  = String[]
+            tbl_tokens = 0
+            while i_line <= length(doc_lines) &&
+                  startswith(lstrip(doc_lines[i_line]), "|")
+                push!(tbl_lines, doc_lines[i_line])
+                tbl_tokens += length(split(doc_lines[i_line]))
+                i_line += 1
+            end
+            # Flush current accumulator if table won't fit (unless accumulator is empty).
+            if cur_tokens + tbl_tokens > max_tokens && cur_tokens > 0
+                push!(pieces, strip(join(cur_lines, "\n")))
+                cur_lines  = String[]
+                cur_tokens = 0
+            end
+            # Append table (never split it even if it exceeds max_tokens alone).
+            append!(cur_lines, tbl_lines)
+            cur_tokens += tbl_tokens
+            continue
+        end
+
+        line_tokens = length(split(line))
+        if cur_tokens + line_tokens > max_tokens && cur_tokens > 0
+            push!(pieces, strip(join(cur_lines, "\n")))
+            cur_lines  = String[]
+            cur_tokens = 0
+        end
+
+        # If a single line exceeds max_tokens, split it by tokens.
+        if line_tokens > max_tokens
+            line_toks = split(line)
+            j = 1
+            while j <= length(line_toks)
+                k = min(j + max_tokens - 1, length(line_toks))
+                push!(pieces, join(line_toks[j:k], " "))
+                j = k + 1
+            end
+            cur_lines  = String[]
+            cur_tokens = 0
+        else
+            push!(cur_lines, line)
+            cur_tokens += line_tokens
+        end
+        i_line += 1
     end
+    cur_tokens > 0 && push!(pieces, strip(join(cur_lines, "\n")))
     return _apply_overlap(pieces, overlap_tokens)
 end
 
