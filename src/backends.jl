@@ -48,6 +48,19 @@ function _get_anthropic_key()
     return k
 end
 
+"""
+    classify_batch(backend, raws) -> Vector{NamedTuple}
+
+Classify a vector of `RawChunk` values. The default implementation calls
+`classify` once per chunk; backends may override for batched efficiency.
+
+Each result is a NamedTuple with fields:
+`content_type`, `tags`, `move_trigger`, `scene_type`, `encounter_key`, `npc_name`.
+"""
+function classify_batch(backend::ClassifyBackend, raws::Vector{RawChunk})
+    return [classify(backend; text=r.text, heading_path=r.heading_path) for r in raws]
+end
+
 # ---- mock embedding backend -------------------------------------------------
 
 struct MockEmbeddingBackend <: EmbeddingBackend

@@ -50,3 +50,29 @@ end
     b = VisionBackend(api_key="sk-fake-key")
     @test b.api_key == "sk-fake-key"
 end
+
+using TomeRAG: classify_batch, RawChunk
+
+@testset "classify_batch default — same result as classify loop" begin
+    b = HeuristicBackend()
+    raws = [
+        RawChunk(heading_path=["Moves", "Iron Vow"],
+                 text="**When you swear upon iron**, roll +heart. On a 10+, your vow is strong.",
+                 chunk_order=1),
+        RawChunk(heading_path=["Bestiary", "Ironclad"],
+                 text="HP 15, Armor 2, Attack: Blade 1d6.",
+                 chunk_order=2),
+        RawChunk(heading_path=["The World", "Geography"],
+                 text="The Ironlands stretch far to the north, cold and unforgiving.",
+                 chunk_order=3),
+    ]
+
+    batch_results  = classify_batch(b, raws)
+    single_results = [classify(b; text=r.text, heading_path=r.heading_path) for r in raws]
+
+    @test length(batch_results) == 3
+    for i in 1:3
+        @test batch_results[i].content_type == single_results[i].content_type
+        @test batch_results[i].move_trigger == single_results[i].move_trigger
+    end
+end

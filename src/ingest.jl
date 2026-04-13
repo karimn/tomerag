@@ -72,8 +72,8 @@ function ingest!(registry::SourceRegistry, source_id::AbstractString, path::Abst
     end
 
     # ── Classify ──────────────────────────────────────────────────────────────
-    classified = [classify(classify_backend; text=r.text, heading_path=r.heading_path)
-                  for r in raws]
+    # Classify all chunks (batched — ClaudeBackend overrides for API efficiency).
+    classified = classify_batch(classify_backend, raws)
 
     # ── Embed (batched) ───────────────────────────────────────────────────────
     embeddings = embed(embed_backend, [r.text for r in raws])

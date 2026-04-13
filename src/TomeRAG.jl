@@ -4,8 +4,8 @@ include("extraction.jl")
 include("content_types.jl")
 include("types.jl")
 include("tokenize.jl")
-include("backends.jl")
 include("chunker.jl")
+include("backends.jl")
 include("storage.jl")
 include("ingest.jl")
 include("query_engine.jl")
@@ -17,7 +17,7 @@ export Source, SourceRegistry, register_source!, get_source
 export EmbeddingBackend, ClassifyBackend,
        MockEmbeddingBackend, MockClassifyBackend,
        OllamaBackend, HeuristicBackend,
-       embed, classify
+       embed, classify, classify_batch
 export ExtractionBackend, PageText, extract_pages, extract_page
 export MockExtractionBackend, PopplerBackend, CachingBackend, VisionBackend
 export split_to_token_budget
