@@ -141,3 +141,35 @@ end
         @test batch_results[i].move_trigger == single_results[i].move_trigger
     end
 end
+
+using TomeRAG: CostEstimate, forecast_cost
+
+@testset "forecast_cost live (requires ANTHROPIC_API_KEY + TOMERAG_LIVE_TESTS=1)" begin
+    if get(ENV, "TOMERAG_LIVE_TESTS", "0") != "1" || !haskey(ENV, "ANTHROPIC_API_KEY")
+        @test_skip "Set TOMERAG_LIVE_TESTS=1 and ANTHROPIC_API_KEY to run"
+    else
+        b = ClaudeBackend(
+            content_types = Set([:move, :mechanic, :lore]),
+            system_hint   = "PbtA",
+        )
+        raws = [
+            RawChunk(heading_path=["Moves", "Iron Vow"],
+                     text="**When you swear upon iron**, roll +heart. On a 10+, your vow is strong.",
+                     chunk_order=1),
+            RawChunk(heading_path=["The World"],
+                     text="The Ironlands are cold and ancient.",
+                     chunk_order=2),
+            RawChunk(heading_path=["Bestiary", "Troll"],
+                     text="HP 30, Armor 1, Attack: Club 2d6.",
+                     chunk_order=3),
+        ]
+        est = forecast_cost(b, raws)
+        @test est isa CostEstimate
+        @test est.model == b.model
+        @test est.n_chunks == 3
+        @test est.n_batches == 1            # 3 chunks < batch_size=20
+        @test est.input_tokens > 0
+        @test est.output_tokens == 3 * 50   # 50 tokens/chunk estimate
+        @test est.total_cost_usd > 0.0f0
+    end
+end

@@ -18,6 +18,7 @@ export EmbeddingBackend, ClassifyBackend,
        MockEmbeddingBackend, MockClassifyBackend,
        OllamaBackend, HeuristicBackend, ClaudeBackend,
        embed, classify, classify_batch
+export CostEstimate, forecast_cost
 export ExtractionBackend, PageText, extract_pages, extract_page
 export MockExtractionBackend, PopplerBackend, CachingBackend, VisionBackend
 export split_to_token_budget

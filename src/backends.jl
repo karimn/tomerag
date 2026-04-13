@@ -3,6 +3,7 @@ using HTTP
 using JSON3
 using Preferences
 using AnthropicSDK
+using Printf
 
 # ---- abstract types ---------------------------------------------------------
 
@@ -300,6 +301,102 @@ end
 function classify(backend::ClaudeBackend; text, heading_path)
     raw = RawChunk(heading_path=heading_path, text=text, chunk_order=0)
     return classify_batch(backend, [raw])[1]
+end
+
+# ---- CostEstimate + forecast_cost --------------------------------------------
+
+"""
+    CostEstimate
+
+Estimated API cost for classifying a set of chunks with `ClaudeBackend`.
+
+- `input_tokens`: exact count from Anthropic's `count_tokens` endpoint
+- `output_tokens`: estimated at 50 tokens per chunk
+- `total_cost_usd`: input + output cost in US dollars
+"""
+struct CostEstimate
+    model          :: String
+    n_chunks       :: Int
+    n_batches      :: Int
+    input_tokens   :: Int
+    output_tokens  :: Int
+    total_cost_usd :: Float32
+end
+
+function Base.show(io::IO, e::CostEstimate)
+    @printf(io, "CostEstimate: %d chunks, %d batches | input %d tok + output ~%d tok | \$%.4f (%s)",
+            e.n_chunks, e.n_batches, e.input_tokens, e.output_tokens,
+            e.total_cost_usd, e.model)
+end
+
+# Conservative fallback when LiteLLM pricing fetch fails (Sonnet rates).
+const _FALLBACK_PRICING = (input=3.00f0, output=15.00f0)  # USD per MTok
+
+const _PRICING_CACHE = Ref{Union{Dict,Nothing}}(nothing)
+
+function _fetch_pricing()
+    isnothing(_PRICING_CACHE[]) || return _PRICING_CACHE[]
+    try
+        resp = HTTP.get(
+            "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
+            readtimeout=10, status_exception=false)
+        HTTP.iserror(resp) && return nothing
+        _PRICING_CACHE[] = JSON3.read(resp.body, Dict)
+    catch
+        _PRICING_CACHE[] = nothing
+    end
+    return _PRICING_CACHE[]
+end
+
+function _model_pricing(model::String)
+    data = _fetch_pricing()
+    if !isnothing(data) && haskey(data, model)
+        entry = data[model]
+        if haskey(entry, :input_cost_per_token) && haskey(entry, :output_cost_per_token)
+            return (
+                input  = Float32(entry[:input_cost_per_token]  * 1_000_000),
+                output = Float32(entry[:output_cost_per_token] * 1_000_000),
+            )
+        end
+    end
+    return _FALLBACK_PRICING
+end
+
+"""
+    forecast_cost(backend, raws) -> CostEstimate
+
+Estimate the cost of classifying `raws` with `backend`. Builds the same batch
+prompts `classify_batch` would send, calls `count_tokens` for exact input token
+counts, and fetches per-token pricing from the LiteLLM community JSON (cached
+per session; falls back to conservative Sonnet rates on failure).
+
+No chunks are classified — this is a read-only preflight operation.
+"""
+function forecast_cost(backend::ClaudeBackend, raws::Vector{RawChunk})
+    isempty(raws) && return CostEstimate(backend.model, 0, 0, 0, 0, 0.0f0)
+
+    client    = Anthropic(api_key=backend.api_key)
+    system    = _build_system_prompt(backend)
+    total_in  = 0
+    n_batches = 0
+
+    for chunk_start in 1:backend.batch_size:length(raws)
+        batch  = raws[chunk_start:min(chunk_start + backend.batch_size - 1, length(raws))]
+        prompt = _build_batch_prompt(backend, batch)
+        tr     = count_tokens(client.messages;
+                              model    = backend.model,
+                              messages = [Message("user", prompt)],
+                              system   = system)
+        total_in  += tr.input_tokens
+        n_batches += 1
+    end
+
+    est_output = length(raws) * 50
+    pricing    = _model_pricing(backend.model)
+    cost       = Float32(total_in   * pricing.input  / 1_000_000 +
+                         est_output * pricing.output / 1_000_000)
+
+    return CostEstimate(backend.model, length(raws), n_batches, total_in, est_output, cost)
 end
 
 # ---- mock extraction backend -------------------------------------------------
