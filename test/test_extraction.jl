@@ -1,5 +1,13 @@
 using Test
+using SHA
 using TomeRAG: extract_pages, extract_page, PageText, _split_pdftext, MockExtractionBackend, PopplerBackend, CachingBackend, ExtractionBackend
+
+# Counting mock for CachingBackend tests — must be top-level (not inside @testset)
+struct _CountingMock <: ExtractionBackend
+    pages::Vector{PageText}
+    counter::Ref{Int}
+end
+TomeRAG.extract_pages(b::_CountingMock, ::AbstractString) = (b.counter[] += 1; b.pages)
 
 @testset "MockExtractionBackend" begin
     pages = [PageText(1, "# Iron Vow\nRoll +heart."),
@@ -79,7 +87,6 @@ end
     @test r1[1].text == "iron vow text"
 
     # Cache files must exist on disk
-    using SHA
     pdf_hash = bytes2hex(sha256(read(pdf_path)))
     cache_dir = joinpath(tmpdir, "cache", pdf_hash)
     @test isfile(joinpath(cache_dir, "page_001.txt"))
@@ -93,14 +100,6 @@ end
     write(pdf_path, "stable content for hash")
 
     call_count = Ref(0)
-
-    # Counting mock — increments counter on each extract_pages call
-    struct _CountingMock <: ExtractionBackend
-        pages::Vector{PageText}
-        counter::Ref{Int}
-    end
-    TomeRAG.extract_pages(b::_CountingMock, ::AbstractString) = (b.counter[] += 1; b.pages)
-
     pages = [PageText(page_num=1, text="cached text")]
     inner = _CountingMock(pages, call_count)
     cache = CachingBackend(inner, joinpath(tmpdir, "cache"))
@@ -124,7 +123,6 @@ end
     extract_pages(cache, p1)
     extract_pages(cache, p2)
 
-    using SHA
     h1 = bytes2hex(sha256(read(p1)))
     h2 = bytes2hex(sha256(read(p2)))
     @test h1 != h2

@@ -90,6 +90,10 @@ Cache layout:
     cache_dir/<sha256_of_pdf>/page_001.txt
                               page_002.txt
                               ...
+
+Note: The cache assumes inner backend returns pages with contiguous `page_num`
+values starting at 1. `PopplerBackend` may skip blank pages (non-contiguous nums);
+wrap it in a re-indexing step or use `MockExtractionBackend` for testing.
 """
 struct CachingBackend <: ExtractionBackend
     inner     :: ExtractionBackend
