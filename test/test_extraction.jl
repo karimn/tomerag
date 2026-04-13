@@ -1,6 +1,6 @@
 using Test
 using SHA
-using TomeRAG: extract_pages, extract_page, PageText, _split_pdftext, MockExtractionBackend, PopplerBackend, CachingBackend, ExtractionBackend
+using TomeRAG: extract_pages, extract_page, PageText, _split_pdftext, MockExtractionBackend, PopplerBackend, CachingBackend, VisionBackend, ExtractionBackend
 
 # Counting mock for CachingBackend tests — must be top-level (not inside @testset)
 struct _CountingMock <: ExtractionBackend
@@ -128,4 +128,22 @@ end
     @test h1 != h2
     @test isdir(joinpath(tmpdir, "cache", h1))
     @test isdir(joinpath(tmpdir, "cache", h2))
+end
+
+@testset "VisionBackend (live — requires ANTHROPIC_API_KEY + TOMERAG_LIVE_TESTS=1)" begin
+    if get(ENV, "TOMERAG_LIVE_TESTS", "0") != "1" ||
+       !haskey(ENV, "ANTHROPIC_API_KEY")
+        @test_skip "Set TOMERAG_LIVE_TESTS=1 and ANTHROPIC_API_KEY to run"
+    else
+        fixture = joinpath(@__DIR__, "fixtures", "test.pdf")
+        if !isfile(fixture)
+            @test_skip "test/fixtures/test.pdf not found"
+        else
+            b = VisionBackend(api_key=ENV["ANTHROPIC_API_KEY"])
+            pages = extract_pages(b, fixture)
+            @test length(pages) >= 1
+            @test all(!isempty(p.text) for p in pages)
+            @test pages[1].page_num == 1
+        end
+    end
 end
