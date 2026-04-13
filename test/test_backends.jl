@@ -1,6 +1,7 @@
 using Test
 using TomeRAG: EmbeddingBackend, ClassifyBackend, MockEmbeddingBackend, MockClassifyBackend,
-               embed, classify
+               embed, classify, VisionBackend
+using TomeRAG: _get_anthropic_key
 
 @testset "mock embedding backend" begin
     b = MockEmbeddingBackend(dim=4)
@@ -24,4 +25,28 @@ end
     @test out.content_type == :mechanic
     @test out.tags == ["x"]
     @test out.move_trigger === nothing
+end
+
+@testset "_get_anthropic_key — reads from ANTHROPIC_API_KEY env var" begin
+    withenv("ANTHROPIC_API_KEY" => "sk-test-from-env") do
+        @test _get_anthropic_key() == "sk-test-from-env"
+    end
+end
+
+@testset "_get_anthropic_key — errors with helpful message when unset" begin
+    withenv("ANTHROPIC_API_KEY" => nothing) do
+        err = try
+            _get_anthropic_key()
+            nothing
+        catch e
+            e
+        end
+        @test err isa ErrorException
+        @test occursin("set_preferences!", err.msg)
+    end
+end
+
+@testset "VisionBackend constructs with explicit api_key" begin
+    b = VisionBackend(api_key="sk-fake-key")
+    @test b.api_key == "sk-fake-key"
 end

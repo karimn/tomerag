@@ -1,6 +1,8 @@
 using SHA
 using HTTP
 using JSON3
+using Preferences
+using AnthropicSDK
 
 # ---- abstract types ---------------------------------------------------------
 
@@ -23,6 +25,28 @@ Returns `(content_type::Symbol, tags::Vector{String},
           encounter_key::Union{String,Nothing}, npc_name::Union{String,Nothing})`.
 """
 function classify end
+
+# ---- API key management ------------------------------------------------------
+
+"""
+    _get_anthropic_key() -> String
+
+Read the Anthropic API key. Preference `anthropic_api_key` (in `LocalPreferences.toml`)
+takes priority over the `ANTHROPIC_API_KEY` environment variable.
+
+To set via Preferences (recommended — survives shell restarts):
+    using Preferences
+    set_preferences!("TomeRAG", "anthropic_api_key" => "sk-ant-...")
+"""
+function _get_anthropic_key()
+    k = @load_preference("anthropic_api_key", get(ENV, "ANTHROPIC_API_KEY", ""))
+    isempty(k) && error(
+        "Anthropic API key not set. Run:\n" *
+        "  using Preferences\n" *
+        "  set_preferences!(\"TomeRAG\", \"anthropic_api_key\" => \"sk-ant-...\")"
+    )
+    return k
+end
 
 # ---- mock embedding backend -------------------------------------------------
 

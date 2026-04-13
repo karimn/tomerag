@@ -146,13 +146,13 @@ API. Handles multi-column layouts, sidebars, and tables that defeat programmatic
 extractors.
 
 - `model`: Claude model ID (default: `"claude-haiku-4-5-20251001"`)
-- `api_key`: Anthropic API key (default: `ENV["ANTHROPIC_API_KEY"]`)
+- `api_key`: Anthropic API key (default: from Preferences or `ANTHROPIC_API_KEY` env var)
 - `concurrency`: max simultaneous API calls (default: `5`)
 - `dpi`: page render resolution (default: `150` — sharp enough, token-efficient)
 """
 Base.@kwdef struct VisionBackend <: ExtractionBackend
     model       :: String = "claude-haiku-4-5-20251001"
-    api_key     :: String = get(ENV, "ANTHROPIC_API_KEY", "")
+    api_key     :: String = _get_anthropic_key()
     concurrency :: Int    = 5
     dpi         :: Int    = 150
 end
