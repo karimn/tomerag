@@ -19,7 +19,7 @@ export EmbeddingBackend, ClassifyBackend,
        OllamaBackend, HeuristicBackend,
        embed, classify
 export ExtractionBackend, PageText, extract_pages, extract_page
-export MockExtractionBackend
+export MockExtractionBackend, PopplerBackend
 export split_to_token_budget
 export initialize_store, insert_chunks, source_stats, similarity_search, bm25_search
 export ingest!

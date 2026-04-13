@@ -34,3 +34,41 @@ function extract_page(backend::ExtractionBackend, pdf_path::AbstractString, page
     idx === nothing && error("page $page_num not found in $pdf_path")
     return pages[idx]
 end
+
+# ── PopplerBackend ─────────────────────────────────────────────────────────────
+
+const _PDFTOTEXT = Sys.which("pdftotext")
+const _PDFTOPPM  = Sys.which("pdftoppm")
+const _PDFINFO   = Sys.which("pdfinfo")
+
+"""
+    PopplerBackend()
+
+Extract text with `pdftotext -layout` (from system Poppler installation). Fast and
+free; degrades on multi-column layouts and loses table cell structure. Suitable for
+single-column documents.
+"""
+struct PopplerBackend <: ExtractionBackend end
+
+function _split_pdftext(output::AbstractString)
+    raw_pages = split(output, '\f')
+    result = PageText[]
+    for (i, raw) in enumerate(raw_pages)
+        text = strip(raw)
+        isempty(text) || push!(result, PageText(page_num=i, text=String(text)))
+    end
+    return result
+end
+
+function extract_pages(::PopplerBackend, pdf_path::AbstractString)
+    isnothing(_PDFTOTEXT) && error("pdftotext not found; install Poppler")
+    output = readchomp(`$(_PDFTOTEXT) -layout $(pdf_path) -`)
+    return _split_pdftext(output)
+end
+
+# Override for efficiency: extract one page with -f / -l flags instead of full PDF.
+function extract_page(::PopplerBackend, pdf_path::AbstractString, page_num::Int)
+    isnothing(_PDFTOTEXT) && error("pdftotext not found; install Poppler")
+    output = readchomp(`$(_PDFTOTEXT) -layout -f $page_num -l $page_num $(pdf_path) -`)
+    return PageText(page_num=page_num, text=String(strip(output)))
+end
