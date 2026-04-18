@@ -3,6 +3,11 @@ using TomeRAG: EmbeddingBackend, ClassifyBackend, MockEmbeddingBackend, MockClas
                embed, classify, VisionBackend
 using TomeRAG: _get_anthropic_key
 
+# Check if Preferences has the API key configured (takes priority over ENV).
+const _PREFS_KEY_SET = withenv("ANTHROPIC_API_KEY" => nothing) do
+    try; _get_anthropic_key(); true; catch; false; end
+end
+
 @testset "mock embedding backend" begin
     b = MockEmbeddingBackend(dim=4)
     v = embed(b, "hello world")
@@ -28,21 +33,24 @@ end
 end
 
 @testset "_get_anthropic_key — reads from ANTHROPIC_API_KEY env var" begin
-    withenv("ANTHROPIC_API_KEY" => "sk-test-from-env") do
-        @test _get_anthropic_key() == "sk-test-from-env"
+    if _PREFS_KEY_SET
+        @test !isempty(_get_anthropic_key())  # Preferences wins over ENV
+    else
+        withenv("ANTHROPIC_API_KEY" => "sk-test-from-env") do
+            @test _get_anthropic_key() == "sk-test-from-env"
+        end
     end
 end
 
 @testset "_get_anthropic_key — errors with helpful message when unset" begin
-    withenv("ANTHROPIC_API_KEY" => nothing) do
-        err = try
-            _get_anthropic_key()
-            nothing
-        catch e
-            e
+    if _PREFS_KEY_SET
+        @test_skip "Preferences key is set — cannot test missing-key error path"
+    else
+        withenv("ANTHROPIC_API_KEY" => nothing) do
+            err = try; _get_anthropic_key(); nothing; catch e; e; end
+            @test err isa ErrorException
+            @test occursin("set_preferences!", err.msg)
         end
-        @test err isa ErrorException
-        @test occursin("set_preferences!", err.msg)
     end
 end
 

@@ -206,19 +206,22 @@ end
 function _build_system_prompt(backend::ClaudeBackend)
     hint = isempty(backend.system_hint) ? "" : " ($(backend.system_hint) system)"
     return "You are classifying chunks of text from an RPG rulebook$(hint). " *
-           "Return ONLY a JSON array with no commentary, markdown, or code fences."
+           "Respond with ONLY a JSON array — no markdown fences, no commentary, no text before or after the array."
 end
 
 function _build_batch_prompt(backend::ClaudeBackend, batch::Vector{RawChunk})
+    n = length(batch)
     types_str = join(sort(collect(backend.content_types), by=string), ", ")
     io = IOBuffer()
-    println(io, "Classify these RPG rulebook chunks. Return a JSON array, one object per chunk, in order.")
+    println(io, "Classify these $n RPG rulebook chunks.")
+    println(io, "Return a JSON array of EXACTLY $n objects (index 1 through $n), one per chunk, in input order.")
+    println(io, "Do NOT split, merge, skip, or add extra entries. Exactly $n objects.")
     println(io)
     println(io, "Valid content_types: $types_str")
     println(io)
-    println(io, "Each object must have these fields:")
+    println(io, "Each object has these fields:")
     println(io, "  content_type  : one of the valid types above (string)")
-    println(io, "  tags          : array of relevant keyword strings (may be empty)")
+    println(io, "  tags          : array of keyword strings (may be empty)")
     println(io, "  move_trigger  : the trigger phrase if content_type is \"move\", else null")
     println(io, "  scene_type    : scene category if applicable, else null")
     println(io, "  encounter_key : encounter identifier if applicable, else null")
@@ -231,6 +234,44 @@ function _build_batch_prompt(backend::ClaudeBackend, batch::Vector{RawChunk})
         println(io)
     end
     return String(take!(io))
+end
+
+"""
+    _extract_json_array(text) -> String
+
+Extract a JSON array from Claude's response, handling code fences, leading/trailing
+commentary, and other noise. Returns the substring from the first `[` to its matching `]`.
+"""
+function _extract_json_array(text::AbstractString)
+    # Find the first '[' and its matching ']' by bracket counting.
+    start = findfirst('[', text)
+    isnothing(start) && error("No JSON array found in response")
+    depth = 0
+    in_string = false
+    escape_next = false
+    for i in start:lastindex(text)
+        c = text[i]
+        if escape_next
+            escape_next = false
+            continue
+        end
+        if c == '\\'
+            escape_next = in_string
+            continue
+        end
+        if c == '"'
+            in_string = !in_string
+            continue
+        end
+        in_string && continue
+        if c == '['
+            depth += 1
+        elseif c == ']'
+            depth -= 1
+            depth == 0 && return text[start:i]
+        end
+    end
+    error("Unterminated JSON array in response")
 end
 
 function _parse_classification(item, content_types::Set{Symbol})
@@ -271,19 +312,28 @@ function classify_batch(backend::ClaudeBackend, raws::Vector{RawChunk})
             resp = create(client.messages;
                           model    = backend.model,
                           messages = [Message("user", prompt)],
-                          max_tokens = 2048,
+                          max_tokens = max(4096, length(batch) * 300),
                           system   = system)
-            text   = resp.content[1].text
-            parsed = JSON3.read(text)
-            if length(parsed) != length(batch)
-                @warn "ClaudeBackend: expected $(length(batch)) items, got $(length(parsed)); falling back" batch_start=chunk_start
-                for (i, raw) in enumerate(batch)
+            json_str = _extract_json_array(resp.content[1].text)
+            parsed   = JSON3.read(json_str)
+            n_parsed = length(parsed)
+
+            if n_parsed < length(batch)
+                # Fewer items than expected — use what we got, fall back for the rest.
+                @warn "ClaudeBackend: expected $(length(batch)) items, got $n_parsed; filling remainder with HeuristicBackend" batch_start=chunk_start
+                for i in 1:n_parsed
+                    results[chunk_start + i - 1] = _parse_classification(parsed[i], backend.content_types)
+                end
+                for i in (n_parsed+1):length(batch)
+                    raw = batch[i]
                     results[chunk_start + i - 1] = classify(fallback; text=raw.text,
                                                              heading_path=raw.heading_path)
                 end
             else
-                for (i, item) in enumerate(parsed)
-                    results[chunk_start + i - 1] = _parse_classification(item, backend.content_types)
+                # Got enough (or extra) — take the first N.
+                n_parsed > length(batch) && @info "ClaudeBackend: got $n_parsed items for $(length(batch)) chunks; using first $(length(batch))"
+                for (i, raw) in enumerate(batch)
+                    results[chunk_start + i - 1] = _parse_classification(parsed[i], backend.content_types)
                 end
             end
         catch e
