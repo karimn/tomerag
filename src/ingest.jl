@@ -76,7 +76,17 @@ function ingest!(registry::SourceRegistry, source_id::AbstractString, path::Abst
     classified = classify_batch(classify_backend, raws)
 
     # ── Embed (batched) ───────────────────────────────────────────────────────
-    embeddings = embed(embed_backend, [r.text for r in raws])
+    # Prepend heading path so move/section names are searchable by name.
+    # Both embedding and BM25 FTS use this text so "Face Danger" is findable
+    # regardless of search mode. heading_path is still stored separately for
+    # structured filtering.
+    function _search_text(r::RawChunk)
+        isempty(r.heading_path) && return r.text
+        heading = join(r.heading_path, " > ")
+        return "$(heading)\n\n$(r.text)"
+    end
+    search_texts = [_search_text(r) for r in raws]
+    embeddings   = embed(embed_backend, search_texts)
 
     # ── Build Chunk objects ───────────────────────────────────────────────────
     chunks = Chunk[]
@@ -87,7 +97,7 @@ function ingest!(registry::SourceRegistry, source_id::AbstractString, path::Abst
             source_id       = src.id,
             doc_id          = String(doc_id),
             doc_path        = abspath(path),
-            text            = r.text,
+            text            = search_texts[i],
             embedding       = embeddings[i],
             embedding_model = src.embedding_model,
             token_count     = token_count(r.text),
