@@ -137,7 +137,7 @@ Expected: `bun.lock` created, `node_modules/` populated, no errors.
 - [ ] **Step 7: Verify Bun test runner works**
 
 Run: `bun test 2>&1 | tail -5`
-Expected: `0 pass 0 fail` (no test files yet) — confirms the runner is wired.
+Expected: Bun 1.3.x prints `error: 0 test files matching ...` and exits non-zero **because there are no test files yet** — this is the accepted clean baseline (no test *failures*). The runner being installed and recognizing the `test` command (together with a successful `bun install`) confirms the toolchain is wired. Real `bun test` runs begin in Task 1 once `test/*.test.ts` files exist. Do **not** add a placeholder/junk test to make this exit zero.
 
 - [ ] **Step 8: Commit**
 
