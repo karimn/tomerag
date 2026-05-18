@@ -1,0 +1,21 @@
+{
+  "name": "tomerag",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "module": "src/index.ts",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "ingest": "bun run src/cli/ingest.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.39.0",
+    "@duckdb/node-api": "1.5.2-r.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.8.0"
+  }
+}
