@@ -6,7 +6,7 @@ export function wsTokens(s: string): string[] {
   return t === "" ? [] : t.split(/\s+/);
 }
 
-export function wsCount(s: string): number {
+function wsCount(s: string): number {
   return wsTokens(s).length;
 }
 
@@ -15,6 +15,7 @@ export function normalizeText(s: string): string {
   return s.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
+/** Whitespace token count. Fast approximation adequate for chunk budgeting. */
 export function tokenCount(s: string): number {
   return wsCount(s);
 }
