@@ -22,7 +22,7 @@ export class MockClassifyBackend extends ClassifyBackend {
     this.tags = opts?.tags ?? [];
   }
 
-  override async classify(): Promise<Classification> {
+  override async classify(_input: { text: string; headingPath: string[] }): Promise<Classification> {
     return {
       contentType: this.contentType,
       tags: [...this.tags],
