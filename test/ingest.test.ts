@@ -2,14 +2,14 @@ import { test, expect } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync, writeFileSync } from "node:fs";
-import { ingest } from "../src/ingest.ts";
+import { ingest, injectPageMarker, assignPages } from "../src/ingest.ts";
 import { initializeStore, sourceStats, bm25Search } from "../src/storage.ts";
 import { defaultChunkingConfig } from "../src/types.ts";
 import { DEFAULT_CONTENT_TYPES } from "../src/content-types.ts";
 import { MockEmbeddingBackend } from "../src/backends/embedding.ts";
 import { HeuristicBackend } from "../src/backends/classify.ts";
 import { MockExtractionBackend } from "../src/backends/extraction.ts";
-import type { Source } from "../src/types.ts";
+import type { Source, RawChunk } from "../src/types.ts";
 
 function mkSource(overrides: Partial<Source> = {}): Source {
   const dir = mkdtempSync(join(tmpdir(), "tomerag-ing-"));
@@ -93,6 +93,39 @@ test("format=auto detects pdf by extension", async () => {
     extractionBackend: new MockExtractionBackend([{ pageNum: 1, text: "# Content\nAuto-detected pdf content here." }]),
   });
   expect(n).toBeGreaterThanOrEqual(1);
+});
+
+test("injectPageMarker: marker after heading line", () => {
+  const out = injectPageMarker("# Iron Vow\nbody text here.", 3);
+  expect(out).toBe("# Iron Vow\n<!-- page 3 -->\nbody text here.");
+});
+
+test("injectPageMarker: marker prepended when no leading heading", () => {
+  const out = injectPageMarker("Some prose without a heading.", 2);
+  expect(out).toBe("<!-- page 2 -->\nSome prose without a heading.");
+});
+
+test("injectPageMarker: heading with leading blank lines", () => {
+  const out = injectPageMarker("\n\n# Heading\nbody.", 5);
+  expect(out).toBe("\n\n# Heading\n<!-- page 5 -->\nbody.");
+});
+
+test("assignPages: last marker wins for cross-page chunk", () => {
+  const raws: RawChunk[] = [
+    { headingPath: [], text: "end of page 1.\n<!-- page 2 -->\nstart of page 2.", chunkOrder: 1, page: "" },
+  ];
+  const out = assignPages(raws);
+  expect(out[0]!.page).toBe("2");
+  expect(out[0]!.text).toBe("end of page 1.\nstart of page 2.");
+});
+
+test("assignPages: no marker yields empty page", () => {
+  const raws: RawChunk[] = [
+    { headingPath: [], text: "no marker here", chunkOrder: 1, page: "" },
+  ];
+  const out = assignPages(raws);
+  expect(out[0]!.page).toBe("");
+  expect(out[0]!.text).toBe("no marker here");
 });
 
 test("format=pdf without extractionBackend throws", async () => {

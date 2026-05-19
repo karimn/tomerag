@@ -23,11 +23,11 @@ export interface IngestOptions {
 
 export function injectPageMarker(pageText: string, pageNum: number): string {
   const marker = `<!-- page ${pageNum} -->`;
-  const nl = pageText.indexOf("\n");
-  const line1 = nl < 0 ? pageText : pageText.slice(0, nl);
-  const rest = nl < 0 ? "" : pageText.slice(nl + 1);
-  if (line1.trim().startsWith("#")) {
-    return `${line1}\n${marker}\n${rest}`;
+  const lines = pageText.split("\n");
+  const firstNonBlank = lines.findIndex((l) => l.trim() !== "");
+  if (firstNonBlank !== -1 && lines[firstNonBlank]!.trim().startsWith("#")) {
+    lines.splice(firstNonBlank + 1, 0, marker);
+    return lines.join("\n");
   }
   return `${marker}\n${pageText}`;
 }
