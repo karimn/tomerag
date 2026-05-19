@@ -86,7 +86,6 @@ test.skipIf(process.env["TOMERAG_LIVE_TESTS"] !== "1")(
       classifyBackend: new HeuristicBackend(),
     });
     process.env["DB_PATH"] = src.dbPath;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { searchRules } = (await import(SCRIBE_QUERY)) as any;
     const results = await searchRules("delve the depths", { k: 3 });
     expect(results.length).toBeGreaterThanOrEqual(1);
