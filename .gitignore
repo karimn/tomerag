@@ -1,0 +1,6 @@
+node_modules/
+dist/
+tomerag.config.json
+*.duckdb
+*.duckdb.wal
+.DS_Store
