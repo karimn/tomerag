@@ -5,7 +5,7 @@ import type { ContentType, DocumentType, Source } from "../types.ts";
 import { defaultChunkingConfig } from "../types.ts";
 import { initializeStore } from "../storage.ts";
 import { ingest } from "../ingest.ts";
-import { MockEmbeddingBackend, OllamaBackend } from "../backends/embedding.ts";
+import { MockEmbeddingBackend, NomicHostedBackend, OllamaBackend } from "../backends/embedding.ts";
 import type { EmbeddingBackend } from "../backends/embedding.ts";
 import { HeuristicBackend, ClaudeBackend } from "../backends/classify.ts";
 import type { ClassifyBackend } from "../backends/classify.ts";
@@ -50,6 +50,7 @@ const { values } = parseArgs({
     "path": { type: "string" },
     "classify": { type: "string", default: "heuristic" },
     "embed": { type: "string", default: "ollama" },
+    "nomic-api-key": { type: "string" },
   },
 });
 
@@ -62,10 +63,25 @@ for (const req of ["source-config", "doc-id", "document-type", "path"] as const)
 
 const source = loadSource(values["source-config"]!);
 
-const embedBackend: EmbeddingBackend =
-  values.embed === "mock"
-    ? new MockEmbeddingBackend({ dim: source.embeddingDim })
-    : new OllamaBackend({ model: source.embeddingModel, dim: source.embeddingDim });
+function buildEmbedBackend(): EmbeddingBackend {
+  switch (values.embed) {
+    case "mock":
+      return new MockEmbeddingBackend({ dim: source.embeddingDim });
+    case "ollama":
+      return new OllamaBackend({ model: source.embeddingModel, dim: source.embeddingDim });
+    case "nomic":
+      return new NomicHostedBackend({
+        apiKey: values["nomic-api-key"],
+        model: source.embeddingModel,
+        dim: source.embeddingDim,
+      });
+    default:
+      console.error(`Unknown --embed value: ${values.embed} (expected mock | ollama | nomic)`);
+      process.exit(2);
+  }
+}
+
+const embedBackend: EmbeddingBackend = buildEmbedBackend();
 
 const classifyBackend: ClassifyBackend =
   values.classify === "claude"

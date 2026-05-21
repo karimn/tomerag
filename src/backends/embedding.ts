@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { requireNomicKey } from "../config.ts";
 
 export abstract class EmbeddingBackend {
   abstract embed(text: string): Promise<Float32Array>;
@@ -48,12 +49,12 @@ export class NomicHostedBackend extends EmbeddingBackend {
   static readonly DEFAULT_DIM = 768;
   static readonly ENDPOINT = "https://api-atlas.nomic.ai/v1/embedding/text";
 
-  constructor(opts: { apiKey: string; model?: string; dim?: number; batchSize?: number }) {
+  constructor(opts?: { apiKey?: string; model?: string; dim?: number; batchSize?: number }) {
     super();
-    this.apiKey = opts.apiKey;
-    this.model = opts.model ?? NomicHostedBackend.DEFAULT_MODEL;
-    this.dim = opts.dim ?? NomicHostedBackend.DEFAULT_DIM;
-    this.batchSize = opts.batchSize ?? 32;
+    this.apiKey = requireNomicKey(opts?.apiKey);
+    this.model = opts?.model ?? NomicHostedBackend.DEFAULT_MODEL;
+    this.dim = opts?.dim ?? NomicHostedBackend.DEFAULT_DIM;
+    this.batchSize = opts?.batchSize ?? 32;
   }
 
   private async call(texts: string[]): Promise<Float32Array[]> {

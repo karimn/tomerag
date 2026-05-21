@@ -1,14 +1,17 @@
 # TomeRAG
 
 Bun/TypeScript RAG ingestion library for tabletop RPG content. Chunks markdown
-or PDF rulebooks, classifies chunks by content type, embeds them with Ollama,
-and stores the result in a DuckDB file with HNSW vector search and BM25 full-text
-search indices.
+or PDF rulebooks, classifies chunks by content type, embeds them with Ollama
+or Nomic Atlas, and stores the result in a DuckDB file with HNSW vector search
+and BM25 full-text search indices.
 
 ## Requirements
 
 - [Bun](https://bun.sh) 1.3+
-- [Ollama](https://ollama.com) running locally (for real embeddings; `mock` mode needs no Ollama)
+- For embeddings, **one of**:
+  - [Ollama](https://ollama.com) running locally
+  - A [Nomic Atlas](https://atlas.nomic.ai) API key (hosted, no local model)
+  - `mock` mode (tests; no model needed)
 - DuckDB extensions `vss` and `fts` are installed automatically on first run
 
 ## Installation
@@ -141,6 +144,28 @@ Common models and dimensions:
 | `mxbai-embed-large` | 1024 |
 | `all-minilm` | 384 |
 
+### Nomic Atlas (hosted, no local model)
+
+```ts
+new NomicHostedBackend({
+  apiKey: "nk-...",                    // optional; falls back to NOMIC_API_KEY / config
+  model: "nomic-embed-text-v1.5",      // default; also the static DEFAULT_MODEL
+  dim: 768,                            // default; also DEFAULT_DIM
+  batchSize: 32,                       // default
+})
+```
+
+The key is resolved in this order: explicit `apiKey` → `NOMIC_API_KEY` env var →
+`nomicApiKey` in `tomerag.config.json`. Get a key from
+<https://atlas.nomic.ai/account>.
+
+```json
+{ "nomicApiKey": "nk-..." }
+```
+
+Endpoint: `https://api-atlas.nomic.ai/v1/embedding/text`. The backend posts
+`{ model, texts }` with `Authorization: Bearer <key>`.
+
 ### Mock (tests / no Ollama)
 
 ```ts
@@ -262,7 +287,22 @@ bun run src/cli/ingest.ts \
   --embed ollama
 ```
 
-`--classify` defaults to `heuristic`; `--embed` defaults to `ollama`.
+`--classify` defaults to `heuristic`; `--embed` defaults to `ollama` and also
+accepts `nomic` or `mock`. For `nomic`, the key comes from `--nomic-api-key`,
+`NOMIC_API_KEY`, or `tomerag.config.json`:
+
+```bash
+bun run src/cli/ingest.ts \
+  --source-config sources/ironsworn.json \
+  --doc-id ironsworn-core \
+  --document-type core_rules \
+  --path rulebooks/ironsworn.md \
+  --embed nomic
+```
+
+The CLI passes `embeddingModel` / `embeddingDim` from the source config straight
+through, so set those to `"nomic-embed-text-v1.5"` / `768` in your source JSON
+when using Nomic.
 
 ## Re-ingesting / deduplication
 
@@ -278,6 +318,35 @@ conn.closeSync();
 ```
 
 Then re-ingest normally.
+
+### Migrating from Ollama `nomic-embed-text` → Nomic Atlas `nomic-embed-text-v1.5`
+
+These are **different model versions**: cosine similarity between embeddings
+from the two is unreliable, so a mixed-model database silently degrades search
+quality. Detect mixed-model databases and re-ingest before querying.
+
+Detect what's in an existing DB:
+
+```sql
+SELECT embedding_model, COUNT(*) FROM chunks GROUP BY embedding_model;
+```
+
+If you see `nomic-embed-text` (unversioned, from local Ollama) alongside or
+instead of `nomic-embed-text-v1.5`, you need to re-ingest. The vector dimension
+(`768`) is the same across versions, so the DuckDB schema doesn't change.
+
+To migrate a single source:
+
+1. Update the source config's `embeddingModel` to `"nomic-embed-text-v1.5"`.
+2. Delete the existing rows (or the whole `.duckdb` file):
+
+   ```ts
+   await conn.run("DELETE FROM chunks WHERE source_id = ?", [source.id]);
+   await conn.run("DELETE FROM source_meta WHERE id = ?", [source.id]);
+   ```
+
+3. Re-run ingestion with `--embed nomic`. The new `source_meta.embedding_model`
+   will read `nomic-embed-text-v1.5` and all chunks will be consistent.
 
 ## Development
 
