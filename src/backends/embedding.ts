@@ -36,7 +36,53 @@ export class MockEmbeddingBackend extends EmbeddingBackend {
   }
 }
 
-const OllamaResponse = z.object({ embeddings: z.array(z.array(z.number())) });
+const EmbedResponse = z.object({ embeddings: z.array(z.array(z.number())) });
+
+export class NomicHostedBackend extends EmbeddingBackend {
+  readonly model: string;
+  readonly dim: number;
+  readonly batchSize: number;
+  private readonly apiKey: string;
+
+  static readonly DEFAULT_MODEL = "nomic-embed-text-v1.5";
+  static readonly DEFAULT_DIM = 768;
+  static readonly ENDPOINT = "https://api-atlas.nomic.ai/v1/embedding/text";
+
+  constructor(opts: { apiKey: string; model?: string; dim?: number; batchSize?: number }) {
+    super();
+    this.apiKey = opts.apiKey;
+    this.model = opts.model ?? NomicHostedBackend.DEFAULT_MODEL;
+    this.dim = opts.dim ?? NomicHostedBackend.DEFAULT_DIM;
+    this.batchSize = opts.batchSize ?? 32;
+  }
+
+  private async call(texts: string[]): Promise<Float32Array[]> {
+    const resp = await fetch(NomicHostedBackend.ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({ model: this.model, texts }),
+    });
+    if (!resp.ok) {
+      throw new Error(`Nomic API returned HTTP ${resp.status}: ${await resp.text()}`);
+    }
+    const payload = EmbedResponse.parse(await resp.json());
+    return payload.embeddings.map((e) => Float32Array.from(e));
+  }
+
+  override embed(text: string): Promise<Float32Array>;
+  override embed(texts: string[]): Promise<Float32Array[]>;
+  override async embed(input: string | string[]): Promise<Float32Array | Float32Array[]> {
+    if (!Array.isArray(input)) return (await this.call([input]))[0]!;
+    const out: Float32Array[] = [];
+    for (let i = 0; i < input.length; i += this.batchSize) {
+      out.push(...(await this.call(input.slice(i, i + this.batchSize))));
+    }
+    return out;
+  }
+}
 
 export class OllamaBackend extends EmbeddingBackend {
   readonly model: string;
@@ -62,7 +108,7 @@ export class OllamaBackend extends EmbeddingBackend {
     if (!resp.ok) {
       throw new Error(`Ollama returned HTTP ${resp.status}: ${await resp.text()}`);
     }
-    const payload = OllamaResponse.parse(await resp.json());
+    const payload = EmbedResponse.parse(await resp.json());
     return payload.embeddings.map((e) => Float32Array.from(e));
   }
 

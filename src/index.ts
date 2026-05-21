@@ -18,7 +18,7 @@ export { DEFAULT_CONTENT_TYPES, PBTA_CONTENT_TYPES, YZE_CONTENT_TYPES } from "./
 export { wsTokens, normalizeText, tokenCount, contentHash } from "./tokenize.ts";
 export { parseMarkdownSections, splitToTokenBudget, chunkDocument } from "./chunker.ts";
 export { loadConfig, resetConfigCache, requireAnthropicKey } from "./config.ts";
-export { EmbeddingBackend, MockEmbeddingBackend, OllamaBackend } from "./backends/embedding.ts";
+export { EmbeddingBackend, MockEmbeddingBackend, OllamaBackend, NomicHostedBackend } from "./backends/embedding.ts";
 export type { ClaudeBackendOptions, CostEstimate } from "./backends/classify.ts";
 export {
   ClassifyBackend, MockClassifyBackend, HeuristicBackend, ClaudeBackend,
