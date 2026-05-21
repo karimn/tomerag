@@ -1,13 +1,20 @@
 import { test, expect, afterEach } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { NomicHostedBackend } from "../src/backends/embedding.ts";
+import { resetConfigCache } from "../src/config.ts";
 
 const origFetch = globalThis.fetch;
 const origKey = process.env["NOMIC_API_KEY"];
+const origCwd = process.cwd();
 
 afterEach(() => {
   globalThis.fetch = origFetch;
   if (origKey === undefined) delete process.env["NOMIC_API_KEY"];
   else process.env["NOMIC_API_KEY"] = origKey;
+  process.chdir(origCwd);
+  resetConfigCache();
 });
 
 test("nomic backend construction with explicit apiKey", () => {
@@ -30,7 +37,14 @@ test("nomic backend picks up NOMIC_API_KEY env var", () => {
 
 test("nomic backend throws a helpful error when no key is available", () => {
   delete process.env["NOMIC_API_KEY"];
-  expect(() => new NomicHostedBackend()).toThrow(/NOMIC_API_KEY/);
+  const dir = mkdtempSync(join(tmpdir(), "tomerag-nomic-"));
+  process.chdir(dir);
+  resetConfigCache();
+  try {
+    expect(() => new NomicHostedBackend()).toThrow(/NOMIC_API_KEY/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("nomic embed sends Bearer auth + {model, texts} body", async () => {
