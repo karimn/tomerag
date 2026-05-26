@@ -6,3 +6,4 @@ tomerag.config.json
 .DS_Store
 .claude/
 .remember/
+.worktrees/
