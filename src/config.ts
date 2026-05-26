@@ -31,13 +31,13 @@ export function resetConfigCache(): void {
   cache = null;
 }
 
-/** Resolve an Anthropic API key from explicit arg or config; throw if absent. */
+/** Resolve an Anthropic API key from explicit arg, env var, or config; throw if absent. */
 export function requireAnthropicKey(explicit?: string): string {
-  const key = explicit ?? loadConfig().anthropicApiKey;
+  const key = explicit ?? process.env.ANTHROPIC_API_KEY ?? loadConfig().anthropicApiKey;
   if (!key) {
     throw new Error(
-      `Anthropic API key not set. Pass apiKey explicitly or add ` +
-      `"anthropicApiKey" to ${CONFIG_PATH}.`,
+      `Anthropic API key not set. Pass apiKey explicitly, set ANTHROPIC_API_KEY env var, ` +
+      `or add "anthropicApiKey" to ${CONFIG_PATH}.`,
     );
   }
   return key;

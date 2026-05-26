@@ -8,6 +8,7 @@
         "@anthropic-ai/sdk": "0.39.0",
         "@duckdb/node-api": "1.5.2-r.1",
         "@tomerag/client": "workspace:*",
+        "@tomerag/trophy-gold": "workspace:*",
         "zod": "^4.3.6",
       },
       "devDependencies": {
@@ -19,6 +20,17 @@
       "name": "@tomerag/client",
       "dependencies": {
         "@duckdb/node-api": "1.5.2-r.1",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.2.0",
+        "typescript": "^5.8.0",
+      },
+    },
+    "packages/trophy-gold": {
+      "name": "@tomerag/trophy-gold",
+      "version": "0.0.1",
+      "dependencies": {
+        "@tomerag/client": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "^1.2.0",
@@ -46,6 +58,8 @@
     "@duckdb/node-bindings-win32-x64": ["@duckdb/node-bindings-win32-x64@1.5.2-r.1", "", { "os": "win32", "cpu": "x64" }, "sha512-5XqcqC+4R8ghBEEbnc2a0sqfz1zyPBRb9YcmIWfiuDoCYSYFbKhmHcEyNftZDHcwCoLOHXnUin45jraex4STqQ=="],
 
     "@tomerag/client": ["@tomerag/client@workspace:packages/client"],
+
+    "@tomerag/trophy-gold": ["@tomerag/trophy-gold@workspace:packages/trophy-gold"],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 

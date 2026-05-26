@@ -13,6 +13,7 @@
     "@anthropic-ai/sdk": "0.39.0",
     "@duckdb/node-api": "1.5.2-r.1",
     "@tomerag/client": "workspace:*",
+    "@tomerag/trophy-gold": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {

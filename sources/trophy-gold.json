@@ -1,0 +1,16 @@
+{
+  "id": "trophy-gold",
+  "name": "Trophy Gold",
+  "system": "Trophy Gold",
+  "dbPath": "trophy-gold.duckdb",
+  "embeddingModel": "nomic-embed-text",
+  "embeddingDim": 768,
+  "license": "proprietary",
+  "chunking": {
+    "minTokens": 100,
+    "maxTokens": 800,
+    "overflow": "paragraph",
+    "overlapTokens": 50
+  },
+  "contentTypes": ["mechanic", "lore", "table", "example", "gm_guidance", "flavor", "procedure", "boxed_text", "oracle", "move"]
+}

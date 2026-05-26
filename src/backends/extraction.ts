@@ -49,8 +49,21 @@ function run(bin: string, args: string[]): string {
 }
 
 export class PopplerBackend extends ExtractionBackend {
+  readonly firstPage: number | undefined;
+  readonly lastPage: number | undefined;
+
+  constructor(opts?: { firstPage?: number; lastPage?: number }) {
+    super();
+    this.firstPage = opts?.firstPage;
+    this.lastPage = opts?.lastPage;
+  }
+
   override async extractPages(pdfPath: string): Promise<PageText[]> {
-    return splitPdftext(run("pdftotext", ["-layout", pdfPath, "-"]));
+    const args = ["-layout"];
+    if (this.firstPage !== undefined) args.push("-f", String(this.firstPage));
+    if (this.lastPage !== undefined) args.push("-l", String(this.lastPage));
+    args.push(pdfPath, "-");
+    return splitPdftext(run("pdftotext", args));
   }
 
   override async extractPage(pdfPath: string, pageNum: number): Promise<PageText> {
@@ -125,13 +138,17 @@ export class VisionBackend extends ExtractionBackend {
   readonly model: string;
   readonly concurrency: number;
   readonly dpi: number;
+  readonly firstPage: number | undefined;
+  readonly lastPage: number | undefined;
   private readonly client: Anthropic;
 
-  constructor(opts?: { apiKey?: string; model?: string; concurrency?: number; dpi?: number }) {
+  constructor(opts?: { apiKey?: string; model?: string; concurrency?: number; dpi?: number; firstPage?: number; lastPage?: number }) {
     super();
     this.model = opts?.model ?? "claude-haiku-4-5-20251001";
     this.concurrency = opts?.concurrency ?? 5;
     this.dpi = opts?.dpi ?? 150;
+    this.firstPage = opts?.firstPage;
+    this.lastPage = opts?.lastPage;
     this.client = new Anthropic({ apiKey: requireAnthropicKey(opts?.apiKey) });
   }
 
@@ -177,10 +194,12 @@ export class VisionBackend extends ExtractionBackend {
   }
 
   override async extractPages(pdfPath: string): Promise<PageText[]> {
-    const n = this.pageCount(pdfPath);
+    const total = this.pageCount(pdfPath);
+    const start = this.firstPage ?? 1;
+    const end = this.lastPage ?? total;
     const limit = pLimit(this.concurrency);
     const pages = await Promise.all(
-      Array.from({ length: n }, (_, i) => limit(() => this.extractPage(pdfPath, i + 1))),
+      Array.from({ length: end - start + 1 }, (_, i) => limit(() => this.extractPage(pdfPath, start + i))),
     );
     return pages.sort((a, b) => a.pageNum - b.pageNum);
   }

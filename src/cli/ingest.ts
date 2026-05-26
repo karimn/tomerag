@@ -9,6 +9,8 @@ import { MockEmbeddingBackend, OllamaBackend } from "../backends/embedding.ts";
 import type { EmbeddingBackend } from "../backends/embedding.ts";
 import { HeuristicBackend, ClaudeBackend } from "../backends/classify.ts";
 import type { ClassifyBackend } from "../backends/classify.ts";
+import { PopplerBackend, VisionBackend, CachingBackend, MockExtractionBackend } from "../backends/extraction.ts";
+import type { ExtractionBackend } from "../backends/extraction.ts";
 
 const SourceConfigSchema = z.object({
   id: z.string(),
@@ -50,6 +52,10 @@ const { values } = parseArgs({
     "path": { type: "string" },
     "classify": { type: "string", default: "heuristic" },
     "embed": { type: "string", default: "ollama" },
+    "extraction": { type: "string", default: "poppler" },
+    "extraction-model": { type: "string" },
+    "first-page": { type: "string" },
+    "last-page": { type: "string" },
   },
 });
 
@@ -62,6 +68,22 @@ for (const req of ["source-config", "doc-id", "document-type", "path"] as const)
 
 const source = loadSource(values["source-config"]!);
 
+const pageRange = {
+  firstPage: values["first-page"] ? parseInt(values["first-page"]!) : undefined,
+  lastPage: values["last-page"] ? parseInt(values["last-page"]!) : undefined,
+};
+
+const extractionModel = values["extraction-model"] ?? undefined;
+const visionOpts = { ...pageRange, ...(extractionModel ? { model: extractionModel } : {}) };
+const extractionBackend: ExtractionBackend =
+  values.extraction === "vision"
+    ? new VisionBackend(visionOpts)
+    : values.extraction === "poppler"
+    ? new PopplerBackend(pageRange)
+    : values.extraction === "mock"
+    ? new MockExtractionBackend([])
+    : new CachingBackend({ inner: new VisionBackend(visionOpts), cacheDir: "./.cache/pdf" });
+
 const embedBackend: EmbeddingBackend =
   values.embed === "mock"
     ? new MockEmbeddingBackend({ dim: source.embeddingDim })
@@ -72,14 +94,18 @@ const classifyBackend: ClassifyBackend =
     ? new ClaudeBackend({ contentTypes: source.contentTypes, systemHint: source.system })
     : new HeuristicBackend();
 
+const format = values.extraction === "mock" ? "markdown" : "pdf";
+
 await initializeStore(source);
 const inserted = await ingest({
   source,
   path: values.path!,
   docId: values["doc-id"]!,
   documentType: values["document-type"] as DocumentType,
+  format,
   embedBackend,
   classifyBackend,
+  extractionBackend: format === "pdf" ? extractionBackend : undefined,
 });
 
 console.log(`source=${source.id} doc=${values["doc-id"]} → inserted ${inserted} chunk(s) into ${source.dbPath}`);
