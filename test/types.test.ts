@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
-import type { Chunk, QueryResult, ChunkingConfig, Source } from "../src/types.ts";
+import type { Chunk, QueryResult } from "@tomerag/client";
+import type { ChunkingConfig, Source } from "../src/types.ts";
 import { defaultChunkingConfig } from "../src/types.ts";
 import { DEFAULT_CONTENT_TYPES } from "../src/content-types.ts";
 

@@ -4,3 +4,5 @@ tomerag.config.json
 *.duckdb
 *.duckdb.wal
 .DS_Store
+.claude/
+.remember/

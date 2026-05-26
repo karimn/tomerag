@@ -1,0 +1,13 @@
+{
+  "name": "@tomerag/client",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@duckdb/node-api": "1.5.2-r.1"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.8.0"
+  }
+}

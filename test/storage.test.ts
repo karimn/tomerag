@@ -7,7 +7,8 @@ import {
 } from "../src/storage.ts";
 import { defaultChunkingConfig } from "../src/types.ts";
 import { DEFAULT_CONTENT_TYPES } from "../src/content-types.ts";
-import type { Chunk, Source } from "../src/types.ts";
+import type { Chunk } from "@tomerag/client";
+import type { Source } from "../src/types.ts";
 
 function tmpDb(): string {
   return join(mkdtempSync(join(tmpdir(), "tomerag-db-")), "t.duckdb");
