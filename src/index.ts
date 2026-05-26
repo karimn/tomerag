@@ -1,16 +1,9 @@
 export type {
-  License,
-  DocumentType,
-  ContentType,
-  Overflow,
-  ChunkingConfig,
-  Chunk,
-  QueryResult,
-  Source,
-  RawChunk,
-  PageText,
-  Section,
-  Classification,
+  License, DocumentType, ContentType, Chunk, QueryResult, ReadSource,
+} from "@tomerag/client";
+
+export type {
+  Overflow, ChunkingConfig, Source, RawChunk, PageText, Section, Classification,
 } from "./types.ts";
 export { defaultChunkingConfig } from "./types.ts";
 

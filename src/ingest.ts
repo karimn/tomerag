@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { resolve, extname } from "node:path";
+import type { Chunk } from "@tomerag/client";
 import type {
-  Chunk, DocumentType, RawChunk, Source,
+  DocumentType, RawChunk, Source,
 } from "./types.ts";
 import { chunkDocument } from "./chunker.ts";
 import { contentHash, tokenCount } from "./tokenize.ts";
