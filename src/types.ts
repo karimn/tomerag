@@ -9,7 +9,7 @@ export interface ChunkingConfig {
   maxTokens: number;
   overflow: Overflow;
   overlapTokens: number;
-  atomicPatterns: RegExp[];
+  atomicPatterns: RegExp[]; // defined for parity with TomeRAG.jl; the chunker does not read this field (table atomicity is hardcoded)
 }
 
 export function defaultChunkingConfig(

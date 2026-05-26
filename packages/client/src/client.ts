@@ -5,9 +5,23 @@ import type { Chunk, ContentType, DocumentType, License, QueryResult, ReadSource
 type FilterCol = "content_type" | "document_type" | "system" | "doc_id";
 const ALLOWED_FILTERS: ReadonlySet<string> = new Set(["content_type", "document_type", "system", "doc_id"]);
 
-async function connect(dbPath: string): Promise<DuckDBConnection> {
+/**
+ * Opens a DuckDB connection, runs `fn`, then closes both the connection and the
+ * underlying instance — preventing the file-handle / memory leak that occurs
+ * when only the connection is closed.
+ */
+export async function withConnection<T>(
+  dbPath: string,
+  fn: (conn: DuckDBConnection) => Promise<T>,
+): Promise<T> {
   const instance = await DuckDBInstance.create(dbPath);
-  return await instance.connect();
+  const conn = await instance.connect();
+  try {
+    return await fn(conn);
+  } finally {
+    conn.closeSync();
+    instance.closeSync();
+  }
 }
 
 function embeddingLiteral(emb: Float32Array, dim: number): string {
@@ -15,8 +29,7 @@ function embeddingLiteral(emb: Float32Array, dim: number): string {
 }
 
 export async function initializeStore(src: ReadSource): Promise<void> {
-  const conn = await connect(src.dbPath);
-  try {
+  await withConnection(src.dbPath, async (conn) => {
     await conn.run("INSTALL vss;");
     await conn.run("LOAD vss;");
     await conn.run("SET hnsw_enable_experimental_persistence = true;");
@@ -41,16 +54,13 @@ export async function initializeStore(src: ReadSource): Promise<void> {
     await conn.run("INSTALL fts;");
     await conn.run("LOAD fts;");
     await conn.run("PRAGMA create_fts_index('chunks', 'id', 'text', stemmer='porter', overwrite=1);");
-  } finally {
-    conn.closeSync();
-  }
+  });
 }
 
 export async function sourceStats(
   src: ReadSource,
 ): Promise<{ chunkCount: number; embeddingModel: string; embeddingDim: number }> {
-  const conn = await connect(src.dbPath);
-  try {
+  return withConnection(src.dbPath, async (conn) => {
     const r = await conn.runAndReadAll("SELECT COUNT(*) AS n FROM chunks");
     const row = r.getRowObjectsJS()[0]!;
     return {
@@ -58,9 +68,7 @@ export async function sourceStats(
       embeddingModel: src.embeddingModel,
       embeddingDim: src.embeddingDim,
     };
-  } finally {
-    conn.closeSync();
-  }
+  });
 }
 
 const ROW_COLUMNS = `id, source_id, doc_id, doc_path, text, embedding::FLOAT[] AS embedding,
@@ -129,8 +137,7 @@ export async function similaritySearch(
 ): Promise<QueryResult[]> {
   const topK = opts?.topK ?? 10;
   const { clause, values } = buildFilters(opts?.filters);
-  const conn = await connect(src.dbPath);
-  try {
+  return withConnection(src.dbPath, async (conn) => {
     await conn.run("LOAD vss;");
     const sql = `
       SELECT ${ROW_COLUMNS},
@@ -146,9 +153,7 @@ export async function similaritySearch(
       score: 1 - Number(row["dist"]),
       rank: i + 1,
     }));
-  } finally {
-    conn.closeSync();
-  }
+  });
 }
 
 export async function bm25Search(
@@ -158,8 +163,7 @@ export async function bm25Search(
 ): Promise<Array<{ chunk: Chunk; score: number }>> {
   const topK = opts?.topK ?? 10;
   const { clause, values } = buildFilters(opts?.filters);
-  const conn = await connect(src.dbPath);
-  try {
+  return withConnection(src.dbPath, async (conn) => {
     await conn.run("LOAD fts;");
     const escaped = queryText.replace(/'/g, "''");
     const where = clause === ""
@@ -175,7 +179,5 @@ export async function bm25Search(
     const r = await conn.runAndReadAll(sql, values);
     const rows = r.getRowObjectsJS() as Record<string, unknown>[];
     return rows.map((row) => ({ chunk: rowToChunk(row), score: Number(row["score"]) }));
-  } finally {
-    conn.closeSync();
-  }
+  });
 }
