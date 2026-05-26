@@ -165,18 +165,17 @@ export async function bm25Search(
   const { clause, values } = buildFilters(opts?.filters);
   return withConnection(src.dbPath, async (conn) => {
     await conn.run("LOAD fts;");
-    const escaped = queryText.replace(/'/g, "''");
     const where = clause === ""
       ? "WHERE score IS NOT NULL"
       : clause.replace("WHERE ", "WHERE score IS NOT NULL AND ");
     const sql = `
       SELECT ${ROW_COLUMNS},
-        fts_main_chunks.match_bm25(id, '${escaped}') AS score
+        fts_main_chunks.match_bm25(id, ?) AS score
       FROM chunks
       ${where}
       ORDER BY score DESC
       LIMIT ${topK}`;
-    const r = await conn.runAndReadAll(sql, values);
+    const r = await conn.runAndReadAll(sql, [queryText, ...values]);
     const rows = r.getRowObjectsJS() as Record<string, unknown>[];
     return rows.map((row) => ({ chunk: rowToChunk(row), score: Number(row["score"]) }));
   });
